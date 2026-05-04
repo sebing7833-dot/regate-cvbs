@@ -1,0 +1,123 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0b0f14;/* Noir bleuté profond */
+  color: white;
+}
+
+.app {
+  max-width: 500px; /* Limite la largeur sur tablette pour rester lisible */
+  margin: auto;     /* Centre l'application sur l'écran */
+  padding: 15px;
+}
+
+/* HEADER */
+#header {
+  font-size: 22px;
+  text-align: center;
+  padding: 15px;
+  color: #ffd54a;
+  font-weight: bold;
+}
+
+/* FANIONS */
+#flags img {
+  width: 60px; /* Taille fixe pour les images des pavillons */
+  /* [Fonctionnel] Assure que les drapeaux s'alignent bien horizontalement */
+}
+
+.flag {
+  width: 45px;
+  height: 45px;
+  background: #1f2a36;
+  display: flex;       /* Centre le contenu du pavillon */
+  align-items: center;
+  justify-content: center;
+}
+
+/* PANELS */
+.panel {
+  background: #141b24; /* Gris anthracite pour séparer les zones */
+  padding: 15px;
+  border-radius: 10px; /* Bords arrondis pour un look moderne */
+  margin-bottom: 10px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 16px;
+  color: #ffd54a;
+}
+
+/* FORM */
+label {
+  font-size: 12px;
+  color: #aaa;
+  display: block;
+  margin-top: 10px;
+}
+
+input, select {
+  width: 100%;       /* Prend toute la largeur disponible */
+  padding: 8px;
+  border-radius: 6px;
+  background: #1f2a36; /* Champ de saisie légèrement plus clair que le panel */
+  color: white;
+  border: none;      /* Supprime les bordures moches par défaut */
+}
+
+/* BUTTONS */
+button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: bold;   /* Texte en gras pour la visibilité */
+  background: #ffd54a; /* Bouton principal en jaune */
+  color: black;
+}
+
+.btn-danger {
+  background: #d32f2f; /* Rouge vif pour l'annulation (danger) */
+  color: white;
+}
+
+/* TEXT */
+#countdown {
+  text-align: center;
+  font-size: 28px;    /* Très gros chiffres pour être vus de loin */
+  margin-top: 10px;
+  color: #00e5ff;     /* Bleu néon pour se détacher du reste */
+}
+
+#label {
+  text-align: center;
+  color: #aaa;
+  margin-top: 5px;
+}
+
+#status {
+  text-align: center;
+  font-size: 12px;
+  color: #888;        /* Discret, pour l'état de la connexion WebSocket */
+}
+
+/* COURSE BUTTONS */
+#raceBtns button {
+  background: #2d3b4d;
+  color: white;
+}
+#flagZone {
+  text-align: center;
+  margin-top: 10px;
+}
+
+#flags {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+#flags img {
+  width: 60px;
+}

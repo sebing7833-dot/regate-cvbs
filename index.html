@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <!-- Crucial : Adapte l'affichage à la taille de l'écran du smartphone (évite de zoomer/dézoomer) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Régate CBVS</title>
+    <!-- Lien vers le fichier de design (couleurs, tailles des boutons, police) -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- ===================== -->
+    <!-- HEADER : Titre de l'application -->
+    <!-- ===================== -->
+    <div id="header">⛵ Paramétrage Régate ⛵ </div>
+
+    <!-- ===================== -->
+    <!-- FANIONS : Zone dynamique -->
+    <!-- [Fonctionnel] Ici s'afficheront les images des pavillons (Classe, P, I, etc.) -->
+    <!-- ===================== -->
+    <div id="flags"></div>
+
+    <!-- ===================== -->
+    <!-- PAVILLON ORANGE : Zone spécifique -->
+    <!-- [Fonctionnel] Indique visuellement si la ligne est ouverte (Pavillon Orange) -->
+    <!-- ===================== -->
+    <div id="flagZone"></div>
+
+    <!-- ===================== -->
+    <!-- SETUP : Panneau de réglages avant course -->
+    <!-- [Technique] Regroupé dans une 'class="panel"' pour pouvoir le masquer après le départ -->
+    <!-- ===================== -->
+    <div id="setup" class="panel">
+
+        <h2>⚙️ Paramètres</h2>
+
+        <!-- Choix de la règle de départ (Règle 30.1, 30.2, etc.) -->
+        <label>Fanion préparatoire</label>
+        <select id="prepFlag">
+            <option value="P" selected>P (Standard)</option>
+            <option value="I">I (Règle 30.1)</option>
+            <option value="U">U (Règle 30.3)</option>
+            <option value="BLACK">Noir (Règle 30.4)</option>
+        </select>
+
+        <!-- Temps entre l'ouverture de ligne et le début de la procédure (5, 4, 1, 0) -->
+        <label>Ouverture → Procédure (min)</label>
+        <input type="number" id="openToProcedure" value="1">
+
+        <!-- Délai après le premier arrivé pour fermer la course -->
+        <label>Temps limite arrivée (min)</label>
+        <input type="number" id="finishLimit" value="20">
+
+    </div>
+
+    <!-- ===================== -->
+    <!-- BOUTON OUVERTURE : Le déclencheur -->
+    <!-- [Fonctionnel] C'est ici que tout commence. Lance la fonction JS 'openLine()' -->
+    <!-- ===================== -->
+    <button id="openBtn" onclick="openLine()">🚩 Ouvrir la ligne 🚩 </button>
+
+    <!-- ===================== -->
+    <!-- LABEL : Informations textuelles -->
+    <!-- [Fonctionnel] Affiche l'étape actuelle (ex: "Procédure 5 min", "Ligne Ouverte") -->
+    <!-- ===================== -->
+    <div id="label"></div>
+
+    <!-- ===================== -->
+    <!-- COUNTDOWN : Le chronomètre -->
+    <!-- [Technique] Élément central mis à jour chaque seconde par le JavaScript -->
+    <!-- ===================== -->
+    <div id="countdown"></div>
+
+    <!-- ===================== -->
+    <!-- ANNULATION : Bouton de secours -->
+    <!-- [Fonctionnel] Envoie "RESET" à l'ESP32 et arrête tous les chronos en cours -->
+    <!-- ===================== -->
+    <button class="btn-danger" onclick="cancelAll()">❌ Annuler</button>
+
+    <!-- ===================== -->
+    <!-- BOUTONS COURSE : Contrôle pendant l'action -->
+    <!-- [Technique] 'style="display:none;"' cache ces boutons au début pour ne pas encombrer l'écran -->
+    <!-- ===================== -->
+    <div id="raceBtns" style="display:none;">
+        <button onclick="recallIndividual()">Rappel individuel</button>
+        <button onclick="recallGeneral()">Rappel général</button>
+        <button onclick="finishRace()">Arrivée</button>
+    </div>
+
+    <!-- STATUS : Indicateur de connexion -->
+    <!-- [Technique] Affiche si le téléphone est bien relié au WebSocket de l'ESP32 -->
+    <div id="status">...</div>
+
+</div>
+
+<!-- Chargement du fichier logique qui va animer tous les éléments ci-dessus -->
+<script src="script.js"></script>
+</body>
+</html>
