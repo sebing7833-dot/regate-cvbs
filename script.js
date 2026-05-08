@@ -117,7 +117,7 @@ function openLine() {
 
 function openLineUI() {
   hideSetup();
-  raceEnded = false;f
+  raceEnded = false;
 
   // Afficher le bouton Options maintenant que la course est lancée
   showBtn("btnOptions");
