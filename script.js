@@ -1,277 +1,223 @@
 /**
  * SCRIPT DE GESTION DE RÉGATE - CVBS
- * Ce fichier gère la logique du chronomètre, l'interface utilisateur
- * et la communication WebSocket avec l'ESP32.
+ * Version 4.0
+ *
+ * Corrections v4 :
+ * - Broadcast état complet à chaque changement (display.html se met à jour en temps réel)
+ * - Bouton Options/Annuler caché pendant le paramétrage, visible après ouverture ligne
+ * - Fix display.html : reçoit l'état immédiatement à la connexion
  */
 
-let ws;
-let connected = false; // État de la connexion avec l'ESP32
-let mockMode = false;  // Mode simulation si l'ESP32 n'est pas trouvé
+let ws, connected = false, mockMode = false;
 
-// Variables pour les timers (intervalles)
-let tProcedure, tStart, tRecall, tFinish;
+// État global complet — envoyé à display.html à chaque changement
+let currentState = {
+  flags:     {},
+  header:    "⛵ Régate CBVS",
+  countdown: ""
+};
 
-// État de la phase d'arrivée
-let finishStarted = false;
+let tProcedure, tStart, tRecall, tFinish, tRecallIndTimer, tRecallGenTimer;
 
-// =====================
-// 🔊 MOTEUR SONORE (Navigateur)
-// =====================
-// [Technique] Utilise l'API Web Audio pour générer des sons sans fichiers MP3.
+let finishStarted = false, raceStartTime = null, finishList = [];
+let recallIndActive = false, recallGenActive = false;
+let lineOpen = false, raceEnded = false;
+
+// ===================== AUDIO =====================
 let audioCtx;
-
-// Débloquer l'audio au premier clic (exigence de sécurité des navigateurs mobiles)
 document.addEventListener("click", () => {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 });
 
-/**
- * Génère un bip sonore sur le haut-parleur du téléphone.
- * [Fonctionnel] Permet au comité de course d'entendre le signal même s'il est loin du klaxon.
- */
 function playSound(event) {
   if (!audioCtx) return;
-
-  const config = {
-    SON_COURT: { freq: 700, dur: 0.25 },
-    SON_LONG: { freq: 700, dur: 0.5 },
-  };
-
-  let s = config[event] || { freq: 700, dur: 0.2 };
-
-  let osc = audioCtx.createOscillator();
-  let gain = audioCtx.createGain();
-
-  osc.type = "sine";
-  osc.frequency.value = s.freq;
-  gain.gain.value = 0.25;
-
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  osc.start();
-  osc.stop(audioCtx.currentTime + s.dur);
+  const config = { SON_COURT: { freq:700, dur:0.25 }, SON_LONG: { freq:700, dur:0.6 } };
+  let s = config[event] || { freq:700, dur:0.2 };
+  let osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type = "sine"; osc.frequency.value = s.freq; gain.gain.value = 0.25;
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + s.dur);
 }
 
-/**
- * Joue une série de bips (ex: 2 bips pour un rappel général).
- */
 function playSequence(event, count, gap = 400) {
-  for (let i = 0; i < count; i++) {
-    setTimeout(() => {
-      playSound(event);
-    }, i * gap);
-  }
+  for (let i = 0; i < count; i++) setTimeout(() => playSound(event), i * gap);
 }
 
-// =====================
-// 🌐 COMMUNICATION WEBSOCKET
-// =====================
-
-/**
- * Tente de se connecter à l'ESP32.
- * [Technique] Si pas de réponse après 1.5s, on bascule en mode Simulation.
- */
-let timeout = setTimeout(() => {
-  if (!connected) enableMock();
-}, 1500);
+// ===================== WEBSOCKET =====================
+let timeout = setTimeout(() => { if (!connected) enableMock(); }, 1500);
 
 function connectWS() {
   try {
-    // Connexion sur le port 81 (défini dans le code ESP32)
     ws = new WebSocket("ws://" + location.hostname + ":81/");
-
     ws.onopen = () => {
       connected = true;
       clearTimeout(timeout);
       setStatus("🟢 ESP32 connecté");
+      // Envoyer l'état actuel dès la connexion
+      broadcastState();
     };
-
     ws.onerror = ws.onclose = () => enableMock();
-
-    // Réception de messages venant de l'ESP32 (si besoin)
     ws.onmessage = (e) => {
       let d = JSON.parse(e.data);
-      if (d.type === "RESET") resetAll();
+      if (d.type === "RESET")             resetAll();
       if (d.type === "RECALL_INDIVIDUAL") handleRecallIndividual();
-      if (d.type === "RECALL_GENERAL") handleRecallGeneral();
+      if (d.type === "RECALL_GENERAL")    handleRecallGeneral();
+      // Quand display.html se connecte, il envoie REQUEST_STATE
+      if (d.type === "REQUEST_STATE")     broadcastState();
     };
-
-  } catch (e) {
-    enableMock();
-  }
+  } catch(e) { enableMock(); }
 }
-
 connectWS();
 
-/**
- * Mode Simulation : Permet de tester l'interface sur un ordinateur sans ESP32.
- */
-function enableMock() {
-  if (mockMode) return;
-  mockMode = true;
-  setStatus("⚠️ Mode simulation PC (Pas de klaxon)");
-}
+function enableMock() { if (mockMode) return; mockMode = true; setStatus("⚠️ Mode simulation PC"); }
+function setStatus(t) { document.getElementById("status").innerText = t; }
 
-function setStatus(t) {
-  document.getElementById("status").innerText = t;
-}
-
-/**
- * Envoie une commande à l'ESP32 au format JSON.
- */
 function send(msg) {
-  if (mockMode) {
-    console.log("MOCK SEND:", msg);
-    // En mode simulation, on exécute l'UI localement
-    if (msg.type === "OPEN_LINE") openLineUI();
-    if (msg.type === "RECALL_INDIVIDUAL") handleRecallIndividual();
-    if (msg.type === "RECALL_GENERAL") handleRecallGeneral();
-    if (msg.type === "FINISH") handleFinish();
-    if (msg.type === "RESET") resetAll();
-    return;
-  }
+  if (mockMode) { console.log("MOCK:", msg); return; }
   if (connected) ws.send(JSON.stringify(msg));
 }
 
-// =====================
-// 🚩 GESTION DES PAVILLONS
-// =====================
-
 /**
- * Met à jour les images des drapeaux affichées à l'écran.
- * [Fonctionnel] Reflète l'état officiel de la procédure de course.
+ * Diffuse l'état complet à tous les clients connectés (dont display.html)
  */
-function updateFlags({ orange, classFlag, prep, x, ap }) {
-  let html = "";
-  // Les images doivent être dans un dossier /images/ sur le LittleFS
-  if (orange) html += '<img src="images/Pav_orange.svg" title="Ligne ouverte">';
-  if (classFlag) html += '<img src="images/Pav_VNO.svg" title="Classe">';
-
-  if (prep) {
-    let file = {
-      "P": "Pav_P.svg",
-      "I": "Pav_I.svg",
-      "U": "Pav_U.svg",
-      "BLACK": "Pav_noir.svg"
-    }[prep];
-    if (file) html += `<img src="images/${file}" title="Préparatoire">`;
-  }
-
-  if (x) html += '<img src="images/Pav_X.svg" title="Rappel Individuel">';
-  if (ap) html += '<img src="images/1er_substitut.svg" title="Rappel Général">';
-
-  document.getElementById("flags").innerHTML = html;
+function broadcastState() {
+  send({
+    type:      "STATE",
+    flags:     currentState.flags,
+    header:    currentState.header,
+    countdown: currentState.countdown
+  });
 }
 
-// =====================
-// ⏱️ LOGIQUE DE COURSE (RÈGLE 26)
-// =====================
+// ===================== PAVILLONS =====================
+function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, apert } = {}) {
+  currentState.flags = { orange, classFlag, prep, x, ap, bleu, n, a, apert };
+  let html = "";
+  if (orange)    html += '<img src="images/Pav_orange.svg"  alt="Orange">';
+  if (classFlag) html += '<img src="images/Pav_VNO.svg"     alt="Classe">';
+  if (prep) {
+    let file = { "P":"Pav_P.svg","I":"Pav_I.svg","U":"Pav_U.svg","BLACK":"Pav_noir.svg" }[prep];
+    if (file) html += `<img src="images/${file}" alt="${prep}">`;
+  }
+  if (x)     html += '<img src="images/Pav_X.svg"         alt="Rappel individuel">';
+  if (ap)    html += '<img src="images/1er_substitut.svg" alt="Rappel général">';
+  if (bleu)  html += '<img src="images/Pav_bleur.svg" alt="Drapeau bleu">';
+  if (n)     html += '<img src="images/Pav_N.svg"         alt="Pavillon N">';
+  if (a)     html += '<img src="images/Pav_A.svg"         alt="Pavillon A">';
+  if (apert) html += '<img src="images/Pav_A.svg"    alt="Aperçu">';
+  document.getElementById("flags").innerHTML = html;
+  broadcastState();
+}
 
-/**
- * Phase 1 : Ouverture de la ligne.
- * L'officier appuie sur le bouton pour lancer le cycle.
- */
+// ===================== OUVERTURE LIGNE =====================
 function openLine() {
-  send({ type: "OPEN_LINE" });
-  openLineUI(); // Lance l'affichage immédiatement
+  send({ type:"OPEN_LINE" });
+  openLineUI();
 }
 
 function openLineUI() {
   hideSetup();
+  raceEnded = false;f
+
+  // Afficher le bouton Options maintenant que la course est lancée
+  showBtn("btnOptions");
+
   let delay = parseInt(document.getElementById("openToProcedure").value || 1) * 60;
   setHeader("🚩 Ligne ouverte");
-  updateFlags({ orange: true });
-  playSound("SON_COURT");
+  updateFlags({ orange:true });
+  showBtn("btnApercu");
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   startProcedure(delay);
 }
 
-/**
- * Compte à rebours avant le signal d'avertissement (T-5 min).
- */
+// ===================== APERÇU =====================
+function sendApercu() {
+  clearInterval(tProcedure); clearInterval(tStart);
+  setHeader("⚓ Aperçu — Retard de départ");
+  updateFlags({ orange:true, apert:true });
+  send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
+  document.getElementById("countdown").innerText = "";
+  currentState.countdown = "";
+  hideBtn("btnApercu");
+  showBtn("btnAffaleeApercu");
+}
+
+function affaleeApercu() {
+  hideBtn("btnAffaleeApercu");
+  updateFlags({ orange:true });
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
+  setHeader("⏳ Signal avertissement dans 1 min");
+  let sec = 60;
+  clearInterval(tProcedure);
+  tProcedure = setInterval(() => {
+    updateCountdown(sec, "Signal avertissement dans");
+    if (sec <= 0) { clearInterval(tProcedure); startProcedureUI(); }
+    sec--;
+  }, 1000);
+}
+
+// ===================== PROCÉDURE =====================
 function startProcedure(sec) {
   clearInterval(tProcedure);
   tProcedure = setInterval(() => {
     updateCountdown(sec, "Procédure de départ dans");
-    if (sec <= 0) {
-      clearInterval(tProcedure);
-      startProcedureUI(); // Passage auto à T-5
-    }
+    if (sec <= 0) { clearInterval(tProcedure); startProcedureUI(); }
     sec--;
   }, 1000);
 }
 
-/**
- * Signal d'avertissement (T-5 min).
- * [Fonctionnel] Envoi du pavillon de classe + 1 son court.
- */
 function startProcedureUI() {
-  setHeader("⚠️ Signal d'Avertissement (T-5)");
-  updateFlags({ orange: true, classFlag: true });
-  send({ type: "BEEP_COURT" }); // Klaxon réel
-  playSound("SON_COURT");       // Son téléphone
+  showBtn("btnApercu");
+  setHeader("⚠️ Signal d'Avertissement — T-5");
+  updateFlags({ orange:true, classFlag:true });
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   startStart(300);
 }
 
-/**
- * Séquence de départ (T-5 à T-0).
- */
+// ===================== TIMER T-5 → T0 =====================
 function startStart(sec) {
   clearInterval(tStart);
   tStart = setInterval(() => {
     updateCountdown(sec, "DÉPART DANS");
-
-    // T-4 min : Signal préparatoire
     if (sec === 240) {
-      updateFlags({
-        orange: true,
-        classFlag: true,
-        prep: document.getElementById("prepFlag").value
-      });
-      send({ type: "BEEP_COURT" });
-      playSound("SON_COURT");
+      updateFlags({ orange:true, classFlag:true, prep:document.getElementById("prepFlag").value });
+      send({ type:"BEEP_COURT" }); playSound("SON_COURT");
     }
-
-    // T-1 min : Signal de la dernière minute (Affalage préparatoire)
     if (sec === 60) {
-      updateFlags({ orange: true, classFlag: true, prep: null });
-      send({ type: "BEEP_LONG" });
-      playSound("SON_LONG");
+      updateFlags({ orange:true, classFlag:true, prep:null });
+      send({ type:"BEEP_LONG" }); playSound("SON_LONG");
     }
-
-    // T-0 : LE DÉPART
-    if (sec <= 0) {
-      clearInterval(tStart);
-      startRaceUI();
-    }
+    if (sec === 0) { clearInterval(tStart); hideBtn("btnApercu"); startRaceUI(); return; }
     sec--;
   }, 1000);
 }
 
-/**
- * Course lancée.
- * [Fonctionnel] On affiche les boutons de rappel et d'arrivée.
- */
+// ===================== COURSE =====================
 function startRaceUI() {
   setHeader("🏁 Course en cours");
-  updateFlags({ orange: true });
-  send({ type: "BEEP_COURT" });
-  playSound("SON_COURT");
+  updateFlags({ orange:true });
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
+  lineOpen = true;
+  raceStartTime = new Date();
+  document.getElementById("startTimeDisplay").innerText = "⏱ Départ officiel : " + raceStartTime.toLocaleTimeString();
   document.getElementById("raceBtns").style.display = "block";
-  startRecallTimer(240); // Chrono de 4 min pour la fermeture de ligne
+  showBtn("btnRecallInd"); showBtn("btnRecallGen");
+  startRecallTimer(240);
 }
 
-/**
- * Timer de fermeture de ligne (4 minutes après le départ).
- */
+// ===================== FERMETURE LIGNE =====================
 function startRecallTimer(sec) {
   clearInterval(tRecall);
   tRecall = setInterval(() => {
     if (sec <= 0) {
       clearInterval(tRecall);
       document.getElementById("countdown").innerText = "";
+      currentState.countdown = "";
+      hideBtn("btnRecallInd"); hideBtn("btnRecallGen"); hideBtn("btnCancelRecallInd");
+      updateFlags({ orange:false });
+      lineOpen = false;
+      setHeader("🔒 Ligne fermée");
+      showBtn("btnFinish");
       return;
     }
     updateCountdown(sec, "Fermeture ligne dans");
@@ -279,102 +225,226 @@ function startRecallTimer(sec) {
   }, 1000);
 }
 
-// =====================
-// 📢 RAPPELS ET ARRIVÉES
-// =====================
+// ===================== RAPPEL INDIVIDUEL =====================
+function recallIndividual() { send({ type:"RECALL_INDIVIDUAL" }); handleRecallIndividual(); }
 
 function handleRecallIndividual() {
-  updateFlags({ orange: true, x: true });
-  send({ type: "BEEP_COURT" });
-  playSound("SON_COURT");
+  recallIndActive = true;
+  updateFlags({ orange:true, x:true });
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   setHeader("⚠️ Rappel individuel");
+  hideBtn("btnRecallGen");
+  showBtn("btnCancelRecallInd");
+  hideBtn("btnRecallInd");
+  clearTimeout(tRecallIndTimer);
+  tRecallIndTimer = setTimeout(() => {
+    if (recallIndActive) setHeader("⚠️ Rappel individuel — 45s dépassées");
+  }, 45000);
 }
+
+function cancelRecallIndividual() {
+  recallIndActive = false;
+  clearTimeout(tRecallIndTimer);
+  updateFlags({ orange:true });
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
+  setHeader("🏁 Course en cours");
+  hideBtn("btnCancelRecallInd");
+  hideBtn("btnRecallInd");
+  hideBtn("btnRecallGen");
+}
+
+// ===================== RAPPEL GÉNÉRAL =====================
+function recallGeneral() { send({ type:"RECALL_GENERAL" }); handleRecallGeneral(); }
 
 function handleRecallGeneral() {
-  updateFlags({ orange: true, ap: true });
-  send({ type: "BEEP_DOUBLE" }); // Séquence gérée côté ESP32
-  playSequence("SON_COURT", 2);  // Son téléphone
+  recallGenActive = true;
+  updateFlags({ orange:true, ap:true });
+  send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
   setHeader("🚨 Rappel général");
+  hideBtn("btnRecallInd"); hideBtn("btnCancelRecallInd");
+  clearTimeout(tRecallGenTimer);
+  tRecallGenTimer = setTimeout(() => {
+    if (recallGenActive) setHeader("🚨 Rappel général — 105s dépassées");
+  }, 105000);
+  showBtn("btnAffaleeApercu");
 }
 
-/**
- * Gère les arrivées des bateaux.
- * [Fonctionnel] Le 1er clic lance le chrono de fin de course.
- * Les clics suivants font juste un bip pour chaque bateau.
- */
+// ===================== ARRIVÉES =====================
+function finishRace() { send({ type:"FINISH" }); handleFinish(); }
+
 function handleFinish() {
+  let now = new Date();
   if (!finishStarted) {
     finishStarted = true;
-    let minutes = parseInt(document.getElementById("finishLimit").value || 20);
-    let sec = minutes * 60;
+    updateFlags({ bleu:true });
+    let sec = parseInt(document.getElementById("finishLimit").value || 20) * 60;
     setHeader("🏁 Arrivées en cours");
-    send({ type: "BEEP_COURT" });
-    playSound("SON_COURT");
-
+    clearInterval(tFinish);
     tFinish = setInterval(() => {
       if (sec <= 0) {
         clearInterval(tFinish);
-        updateFlags({ orange: false });
+        updateFlags({ orange:false });
         setHeader("⛔ Course terminée");
         document.getElementById("countdown").innerText = "";
+        currentState.countdown = "";
+        broadcastState();
+        hideBtn("btnFinish");
+        raceEnded = true;
         return;
       }
       updateCountdown(sec, "Temps limite arrivée");
       sec--;
     }, 1000);
-  } else {
-    // Bips pour les bateaux suivants
-    send({ type: "BEEP_COURT" });
-    playSound("SON_COURT");
   }
+  send({ type:"BEEP_COURT" }); playSound("SON_COURT");
+  let elapsedMs = now - raceStartTime;
+  let totalSec  = Math.floor(elapsedMs / 1000);
+  let raceTime  = `${Math.floor(totalSec/60)}:${(totalSec%60).toString().padStart(2,"0")}`;
+  finishList.push({ realTime: now.toLocaleTimeString(), raceTime });
+  renderFinishList();
 }
 
-// =====================
-// 🛠️ OUTILS INTERFACE (UI)
-// =====================
-
-function setHeader(t) {
-  document.getElementById("header").innerText = t;
+function renderFinishList() {
+  let html = "<h3>🏁 Arrivées</h3>";
+  finishList.forEach((f,i) => {
+    html += `<div class="finish-item">#${i+1} — ${f.realTime} — Temps : ${f.raceTime}</div>`;
+  });
+  document.getElementById("finishList").innerHTML = html;
 }
 
-/**
- * Formate les secondes en minutes:secondes (ex: 04:59).
- */
-function updateCountdown(sec, label) {
-  let m = Math.floor(sec / 60);
-  let s = sec % 60;
-  document.getElementById("countdown").innerText =
-    `${label} ${m}:${s.toString().padStart(2, "0")}`;
+// ===================== MENU OPTIONS =====================
+function showCancelMenu() {
+  document.getElementById("menuRelancerCourse").style.display = raceEnded ? "block" : "none";
+  document.getElementById("cancelMenu").style.display = "block";
+}
+function hideCancelMenu() {
+  document.getElementById("cancelMenu").style.display = "none";
 }
 
-/**
- * Réinitialise tout le système (Annulation).
- */
-function resetAll() {
-  clearInterval(tProcedure);
-  clearInterval(tStart);
-  clearInterval(tRecall);
-  clearInterval(tFinish);
-  finishStarted = false;
-  setHeader("⛵ Paramétrage Régate ⛵");
-  document.getElementById("raceBtns").style.display = "none";
+function goToSetup() {
+  hideCancelMenu();
+  resetAll();
+}
+
+function cancelRace() {
+  hideCancelMenu();
+  clearInterval(tProcedure); clearInterval(tStart);
+  clearInterval(tRecall);    clearInterval(tFinish);
+  updateFlags({ a:true, n:true });
+  playSequence("SON_COURT", 3, 500);
+  send({ type:"BEEP_TRIPLE" });
+  setHeader("🚫 Course annulée — Pav. N/A");
   document.getElementById("countdown").innerText = "";
-  document.getElementById("flags").innerHTML = "";
+  currentState.countdown = "";
+  broadcastState();
+  document.getElementById("raceBtns").style.display = "none";
+  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu"); hideBtn("btnFinish");
+  showBtn("btnRestart");
+  raceEnded = true;
+}
+
+function endRegatta() {
+  hideCancelMenu();
+  clearInterval(tProcedure); clearInterval(tStart);
+  clearInterval(tRecall);    clearInterval(tFinish);
+  updateFlags({ a:true, n:true });
+  playSequence("SON_COURT", 3, 500);
+  send({ type:"BEEP_TRIPLE" });
+  setHeader("🏴 Régate terminée — Pav. N/A");
+  document.getElementById("countdown").innerText = "";
+  currentState.countdown = "";
+  broadcastState();
+  document.getElementById("raceBtns").style.display = "none";
+  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu"); hideBtn("btnFinish");
+  raceEnded = true;
+}
+
+function relancerCourse() {
+  hideCancelMenu();
+  _resetRaceData();
+  hideBtn("btnRestart"); hideBtn("btnFinish");
+  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu"); hideBtn("btnCancelRecallInd");
+  document.getElementById("raceBtns").style.display = "block";
+  showBtn("btnRecallInd"); showBtn("btnRecallGen");
+  openLineUI();
+}
+
+function restartProcedure() {
+  hideBtn("btnRestart");
+  _resetRaceData();
+  updateFlags({ orange:true });
+  setHeader("🚩 Relance — Ligne ouverte");
+  document.getElementById("raceBtns").style.display = "block";
+  showBtn("btnRecallInd"); showBtn("btnRecallGen"); showBtn("btnApercu");
+  let delay = parseInt(document.getElementById("openToProcedure").value || 1) * 60;
+  startProcedure(delay);
+}
+
+// Réinitialise uniquement les données de course (pas l'UI globale)
+function _resetRaceData() {
+  finishStarted = false; finishList = []; raceStartTime = null;
+  recallIndActive = false; recallGenActive = false;
+  lineOpen = false; raceEnded = false;
+  document.getElementById("finishList").innerHTML       = "";
+  document.getElementById("startTimeDisplay").innerHTML = "";
+  document.getElementById("countdown").innerText        = "";
+  currentState.countdown = "";
+}
+
+// ===================== UI =====================
+function setHeader(t) {
+  currentState.header = t;
+  document.getElementById("header").innerText = t;
+  broadcastState();
+}
+
+function updateCountdown(sec, label) {
+  let m = Math.floor(sec/60), s = sec%60;
+  let txt = `${label} ${m}:${s.toString().padStart(2,"0")}`;
+  currentState.countdown = txt;
+  document.getElementById("countdown").innerText = txt;
+  broadcastState();
+}
+
+function showBtn(id) { let el = document.getElementById(id); if (el) el.style.display = "block"; }
+function hideBtn(id) { let el = document.getElementById(id); if (el) el.style.display = "none";  }
+
+// ===================== RESET COMPLET =====================
+function resetAll() {
+  clearInterval(tProcedure); clearInterval(tStart);
+  clearInterval(tRecall);    clearInterval(tFinish);
+  clearTimeout(tRecallIndTimer); clearTimeout(tRecallGenTimer);
+  finishStarted = false; finishList = []; raceStartTime = null;
+  recallIndActive = false; recallGenActive = false;
+  lineOpen = false; raceEnded = false;
+
+  setHeader("⛵ Paramétrage Régate ⛵");
+  currentState.flags    = {};
+  currentState.countdown = "";
+
+  document.getElementById("raceBtns").style.display     = "none";
+  document.getElementById("countdown").innerText        = "";
+  document.getElementById("flags").innerHTML            = "";
+  document.getElementById("finishList").innerHTML       = "";
+  document.getElementById("startTimeDisplay").innerHTML = "";
+  document.getElementById("cancelMenu").style.display   = "none";
+
+  hideBtn("btnOptions");        // cacher le bouton Options pendant le paramétrage
+  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu");
+  hideBtn("btnCancelRecallInd"); hideBtn("btnFinish"); hideBtn("btnRestart");
+  showBtn("btnRecallInd"); showBtn("btnRecallGen");
+
+  broadcastState();
   showSetup();
 }
 
 function hideSetup() {
-  document.getElementById("setup").style.display = "none";
+  document.getElementById("setup").style.display   = "none";
   document.getElementById("openBtn").style.display = "none";
 }
-
 function showSetup() {
-  document.getElementById("setup").style.display = "block";
+  document.getElementById("setup").style.display   = "block";
   document.getElementById("openBtn").style.display = "block";
 }
 
-// Liaisons boutons HTML -> Fonctions JS
-function recallIndividual() { send({ type: "RECALL_INDIVIDUAL" }); handleRecallIndividual(); }
-function recallGeneral()    { send({ type: "RECALL_GENERAL" }); handleRecallGeneral(); }
-function finishRace()       { send({ type: "FINISH" }); handleFinish(); }
-function cancelAll()        { send({ type: "RESET" }); resetAll(); }
+function cancelAll() { showCancelMenu(); }

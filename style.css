@@ -1,123 +1,159 @@
+/* ===================== BASE ===================== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
-  margin: 0;
   font-family: Arial, sans-serif;
-  background: #0b0f14;/* Noir bleuté profond */
+  background: #0b0f14;
   color: white;
+  min-height: 100vh;
 }
 
 .app {
-  max-width: 500px; /* Limite la largeur sur tablette pour rester lisible */
-  margin: auto;     /* Centre l'application sur l'écran */
+  max-width: 500px;
+  margin: auto;
   padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-/* HEADER */
+/* ===================== HEADER ===================== */
 #header {
   font-size: 22px;
   text-align: center;
   padding: 15px;
   color: #ffd54a;
   font-weight: bold;
+  background: #141b24;
+  border-radius: 10px;
 }
 
-/* FANIONS */
-#flags img {
-  width: 60px; /* Taille fixe pour les images des pavillons */
-  /* [Fonctionnel] Assure que les drapeaux s'alignent bien horizontalement */
-}
-
-.flag {
-  width: 45px;
-  height: 45px;
-  background: #1f2a36;
-  display: flex;       /* Centre le contenu du pavillon */
-  align-items: center;
-  justify-content: center;
-}
-
-/* PANELS */
-.panel {
-  background: #141b24; /* Gris anthracite pour séparer les zones */
-  padding: 15px;
-  border-radius: 10px; /* Bords arrondis pour un look moderne */
-  margin-bottom: 10px;
-}
-
-h2 {
-  margin: 0;
-  font-size: 16px;
-  color: #ffd54a;
-}
-
-/* FORM */
-label {
-  font-size: 12px;
-  color: #aaa;
-  display: block;
-  margin-top: 10px;
-}
-
-input, select {
-  width: 100%;       /* Prend toute la largeur disponible */
-  padding: 8px;
-  border-radius: 6px;
-  background: #1f2a36; /* Champ de saisie légèrement plus clair que le panel */
-  color: white;
-  border: none;      /* Supprime les bordures moches par défaut */
-}
-
-/* BUTTONS */
-button {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  font-weight: bold;   /* Texte en gras pour la visibilité */
-  background: #ffd54a; /* Bouton principal en jaune */
-  color: black;
-}
-
-.btn-danger {
-  background: #d32f2f; /* Rouge vif pour l'annulation (danger) */
-  color: white;
-}
-
-/* TEXT */
-#countdown {
-  text-align: center;
-  font-size: 28px;    /* Très gros chiffres pour être vus de loin */
-  margin-top: 10px;
-  color: #00e5ff;     /* Bleu néon pour se détacher du reste */
-}
-
-#label {
-  text-align: center;
-  color: #aaa;
-  margin-top: 5px;
-}
-
+/* ===================== STATUS ===================== */
 #status {
   text-align: center;
   font-size: 12px;
-  color: #888;        /* Discret, pour l'état de la connexion WebSocket */
+  color: #888;
 }
 
-/* COURSE BUTTONS */
-#raceBtns button {
-  background: #2d3b4d;
-  color: white;
-}
-#flagZone {
-  text-align: center;
-  margin-top: 10px;
-}
-
+/* ===================== FANIONS ===================== */
 #flags {
   display: flex;
   justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
-  margin-top: 10px;
+  min-height: 50px;
 }
-
 #flags img {
   width: 60px;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* ===================== COUNTDOWN ===================== */
+#countdown {
+  text-align: center;
+  font-size: 32px;
+  font-weight: bold;
+  color: #00e5ff;
+  min-height: 44px;
+  letter-spacing: 1px;
+}
+
+/* ===================== HEURE DÉPART ===================== */
+#startTimeDisplay {
+  text-align: center;
+  font-size: 13px;
+  color: #ffd54a;
+  min-height: 20px;
+}
+
+/* ===================== PANELS ===================== */
+.panel {
+  background: #141b24;
+  padding: 15px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.panel-danger {
+  border: 1px solid #d32f2f;
+  background: #1a0f0f;
+}
+h2 { font-size: 15px; color: #ffd54a; }
+h3 { font-size: 14px; color: #ffd54a; margin-bottom: 6px; }
+
+/* ===================== FORM ===================== */
+label { font-size: 12px; color: #aaa; display: block; margin-top: 6px; }
+input, select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: none;
+  background: #1f2a36;
+  color: white;
+  font-size: 14px;
+  margin-top: 3px;
+}
+
+/* ===================== BOUTONS BASE ===================== */
+button {
+  width: 100%;
+  padding: 13px;
+  border-radius: 8px;
+  border: none;
+  font-weight: bold;
+  font-size: 15px;
+  cursor: pointer;
+  background: #ffd54a;
+  color: black;
+  transition: opacity 0.15s, transform 0.1s;
+}
+button:active { opacity: 0.75; transform: scale(0.98); }
+
+/* ===================== VARIANTES BOUTONS ===================== */
+.btn-danger   { background: #c62828; color: white; }
+.btn-warning  { background: #e65100; color: white; }
+.btn-secondary{ background: #2d3b4d; color: white; }
+.btn-success  { background: #2e7d32; color: white; }
+
+/* Bouton arrivée — bleu bien visible */
+.btn-finish {
+  background: #1565c0;
+  color: white;
+  font-size: 18px;
+  padding: 16px;
+}
+
+/* ===================== BOUTONS COURSE ===================== */
+#raceBtns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#btnRecallInd  { background: #f57c00; color: white; }
+#btnRecallGen  { background: #c62828; color: white; }
+
+/* ===================== LISTE ARRIVÉES ===================== */
+#finishList {
+  background: #141b24;
+  border-radius: 10px;
+  padding: 10px;
+}
+.finish-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid #1f2a36;
+  font-size: 13px;
+  color: #ccc;
+}
+.finish-item:last-child { border-bottom: none; }
+
+/* ===================== MENU OPTIONS ===================== */
+#cancelMenu h2 { color: #ff6b6b; }
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 400px) {
+  #countdown { font-size: 26px; }
+  button { padding: 11px; font-size: 14px; }
 }

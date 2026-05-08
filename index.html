@@ -1,103 +1,135 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <!-- Crucial : Adapte l'affichage à la taille de l'écran du smartphone (évite de zoomer/dézoomer) -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Régate CBVS</title>
-    <!-- Lien vers le fichier de design (couleurs, tailles des boutons, police) -->
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Régate CBVS</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-
 <div class="app">
 
-    <!-- ===================== -->
-    <!-- HEADER : Titre de l'application -->
-    <!-- ===================== -->
-    <div id="header">⛵ Paramétrage Régate ⛵ </div>
+  <!-- HEADER -->
+  <div id="header">⛵ Paramétrage Régate ⛵</div>
 
-    <!-- ===================== -->
-    <!-- FANIONS : Zone dynamique -->
-    <!-- [Fonctionnel] Ici s'afficheront les images des pavillons (Classe, P, I, etc.) -->
-    <!-- ===================== -->
-    <div id="flags"></div>
+  <!-- STATUS CONNEXION -->
+  <div id="status">...</div>
 
-    <!-- ===================== -->
-    <!-- PAVILLON ORANGE : Zone spécifique -->
-    <!-- [Fonctionnel] Indique visuellement si la ligne est ouverte (Pavillon Orange) -->
-    <!-- ===================== -->
-    <div id="flagZone"></div>
+  <!-- FANIONS -->
+  <div id="flags"></div>
 
-    <!-- ===================== -->
-    <!-- SETUP : Panneau de réglages avant course -->
-    <!-- [Technique] Regroupé dans une 'class="panel"' pour pouvoir le masquer après le départ -->
-    <!-- ===================== -->
-    <div id="setup" class="panel">
+  <!-- COUNTDOWN -->
+  <div id="countdown"></div>
 
-        <h2>⚙️ Paramètres</h2>
+  <!-- HEURE DÉPART OFFICIEL -->
+  <div id="startTimeDisplay"></div>
 
-        <!-- Choix de la règle de départ (Règle 30.1, 30.2, etc.) -->
-        <label>Fanion préparatoire</label>
-        <select id="prepFlag">
-            <option value="P" selected>P (Standard)</option>
-            <option value="I">I (Règle 30.1)</option>
-            <option value="U">U (Règle 30.3)</option>
-            <option value="BLACK">Noir (Règle 30.4)</option>
-        </select>
+  <!-- ===================== -->
+  <!-- SETUP : Paramètres    -->
+  <!-- ===================== -->
+  <div id="setup" class="panel">
+    <h2>⚙️ Paramètres</h2>
 
-        <!-- Temps entre l'ouverture de ligne et le début de la procédure (5, 4, 1, 0) -->
-        <label>Ouverture → Procédure (min)</label>
-        <input type="number" id="openToProcedure" value="1">
+    <label>Fanion préparatoire</label>
+    <select id="prepFlag">
+      <option value="P" selected>P — Standard</option>
+      <option value="I">I — Règle 30.1</option>
+      <option value="U">U — Règle 30.3</option>
+      <option value="BLACK">Noir — Règle 30.4</option>
+    </select>
 
-        <!-- Délai après le premier arrivé pour fermer la course -->
-        <label>Temps limite arrivée (min)</label>
-        <input type="number" id="finishLimit" value="20">
+    <label>Ouverture → Procédure (min)</label>
+    <input type="number" id="openToProcedure" value="1" min="0" max="60">
 
-    </div>
+    <label>Temps limite arrivée (min)</label>
+    <input type="number" id="finishLimit" value="20" min="1" max="120">
+  </div>
 
-    <!-- ===================== -->
-    <!-- BOUTON OUVERTURE : Le déclencheur -->
-    <!-- [Fonctionnel] C'est ici que tout commence. Lance la fonction JS 'openLine()' -->
-    <!-- ===================== -->
-    <button id="openBtn" onclick="openLine()">🚩 Ouvrir la ligne 🚩 </button>
+  <!-- BOUTON OUVERTURE LIGNE -->
+  <button id="openBtn" onclick="openLine()">🚩 Ouvrir la ligne</button>
 
-    <!-- ===================== -->
-    <!-- LABEL : Informations textuelles -->
-    <!-- [Fonctionnel] Affiche l'étape actuelle (ex: "Procédure 5 min", "Ligne Ouverte") -->
-    <!-- ===================== -->
-    <div id="label"></div>
+  <!-- ===================== -->
+  <!-- APERÇU (retard)       -->
+  <!-- Visible dès ouverture jusqu'à T0 -->
+  <!-- ===================== -->
+  <button id="btnApercu" class="btn-warning" onclick="sendApercu()" style="display:none;">
+    ⚓ Aperçu — Retard de départ (2 sons)
+  </button>
 
-    <!-- ===================== -->
-    <!-- COUNTDOWN : Le chronomètre -->
-    <!-- [Technique] Élément central mis à jour chaque seconde par le JavaScript -->
-    <!-- ===================== -->
-    <div id="countdown"></div>
+  <!-- AFFALÉE APERÇU -->
+  <button id="btnAffaleeApercu" class="btn-warning" onclick="affaleeApercu()" style="display:none;">
+    🔽 Affalée aperçu (1 son) → relance dans 1 min
+  </button>
 
-    <!-- ===================== -->
-    <!-- ANNULATION : Bouton de secours -->
-    <!-- [Fonctionnel] Envoie "RESET" à l'ESP32 et arrête tous les chronos en cours -->
-    <!-- ===================== -->
-    <button class="btn-danger" onclick="cancelAll()">❌ Annuler</button>
+  <!-- ===================== -->
+  <!-- BOUTONS COURSE        -->
+  <!-- ===================== -->
+  <div id="raceBtns" style="display:none;">
 
-    <!-- ===================== -->
-    <!-- BOUTONS COURSE : Contrôle pendant l'action -->
-    <!-- [Technique] 'style="display:none;"' cache ces boutons au début pour ne pas encombrer l'écran -->
-    <!-- ===================== -->
-    <div id="raceBtns" style="display:none;">
-        <button onclick="recallIndividual()">Rappel individuel</button>
-        <button onclick="recallGeneral()">Rappel général</button>
-        <button onclick="finishRace()">Arrivée</button>
-    </div>
+    <button id="btnRecallInd" onclick="recallIndividual()">
+      🚩 Rappel individuel (1 son)
+    </button>
 
-    <!-- STATUS : Indicateur de connexion -->
-    <!-- [Technique] Affiche si le téléphone est bien relié au WebSocket de l'ESP32 -->
-    <div id="status">...</div>
+    <button id="btnCancelRecallInd" class="btn-success" onclick="cancelRecallIndividual()" style="display:none;">
+      ✅ Retirer rappel individuel (1 son)
+    </button>
+
+    <button id="btnRecallGen" onclick="recallGeneral()">
+      🚨 Rappel général (2 sons)
+    </button>
+
+    <!-- Arrivée — visible seulement après fermeture de ligne -->
+    <button id="btnFinish" class="btn-finish" onclick="finishRace()" style="display:none;">
+      🏁 Arrivée (1 son)
+    </button>
+
+    <!-- Relancer procédure après annulation -->
+    <button id="btnRestart" class="btn-warning" onclick="restartProcedure()" style="display:none;">
+      🔄 Relancer une procédure
+    </button>
+
+  </div>
+
+  <!-- LISTE ARRIVÉES -->
+  <div id="finishList"></div>
+
+  <!-- ===================== -->
+  <!-- BOUTON OPTIONS        -->
+  <!-- Caché pendant paramétrage, visible dès ouverture ligne -->
+  <!-- ===================== -->
+  <button id="btnOptions" class="btn-secondary" onclick="cancelAll()" style="display:none;">
+    ⚙️ Options / Annuler
+  </button>
+
+  <!-- ===================== -->
+  <!-- MENU OPTIONS          -->
+  <!-- ===================== -->
+  <div id="cancelMenu" class="panel panel-danger" style="display:none;">
+    <h2>⚙️ Options</h2>
+
+    <button class="btn-secondary" onclick="goToSetup()">
+      🏠 Retour aux paramètres
+    </button>
+
+    <button class="btn-danger" onclick="cancelRace()">
+      🚫 Annuler la course (Pav. N/A — 3 sons)
+    </button>
+
+    <button class="btn-danger" onclick="endRegatta()">
+      🏴 Terminer la régate (Pav. N/A — 3 sons)
+    </button>
+
+    <!-- Visible seulement après fin/annulation -->
+    <button id="menuRelancerCourse" class="btn-warning" onclick="relancerCourse()" style="display:none;">
+      🔄 Relancer une course (repart de zéro)
+    </button>
+
+    <button class="btn-secondary" onclick="hideCancelMenu()">
+      ↩️ Fermer ce menu
+    </button>
+  </div>
 
 </div>
-
-<!-- Chargement du fichier logique qui va animer tous les éléments ci-dessus -->
 <script src="script.js"></script>
 </body>
 </html>
