@@ -1,22 +1,18 @@
 /**
  * SCRIPT DE GESTION DE RÉGATE - CVBS
- * Version 5.0
+ * Version 6.0 — Conforme aux procédures FFVoile officielles
  *
- * Modifications v5 :
- * - Rappel général : arrête tous les timers de course
- * - Affalée 1er substitut (rappel général) : 1 son → relance procédure 1 min après
- * - Renommage bouton "Affalée aperçu" → contexte selon usage (aperçu ou rappel général)
- * - Nettoyage et cohérence générale
+ * Corrections v6 :
+ * - Drapeau bleu déplacé à la fermeture de ligne (pas au 1er arrivant)
+ * - Retrait automatique rappel individuel à 4 min (RCV 29.1)
+ * - Menu Options : 3 cas distincts N / N sur H / N sur A
+ * - N seul : orange reste envoyé + relance procédure dans 1 min
+ * - Pavillon H ajouté dans updateFlags()
  */
 
 let ws, connected = false, mockMode = false;
 
-// État global complet — envoyé à display.html à chaque changement
-let currentState = {
-  flags:     {},
-  header:    "⛵ Régate CBVS",
-  countdown: ""
-};
+let currentState = { flags:{}, header:"⛵ Régate CBVS", countdown:"" };
 
 let tProcedure, tStart, tRecall, tFinish, tRecallIndTimer, tRecallGenTimer;
 
@@ -27,10 +23,7 @@ let recallIndActive = false;
 let recallGenActive = false;
 let lineOpen        = false;
 let raceEnded       = false;
-
-// Contexte du bouton "Descendre pavillon" :
-// "apercu" ou "general" — détermine le comportement à l'affalée
-let affaleeContext  = "";
+let affaleeContext  = ""; // "apercu" ou "general" ou "n"
 
 // ===================== AUDIO =====================
 let audioCtx;
@@ -40,7 +33,10 @@ document.addEventListener("click", () => {
 
 function playSound(event) {
   if (!audioCtx) return;
-  const config = { SON_COURT: { freq:700, dur:0.25 }, SON_LONG: { freq:700, dur:0.6 } };
+  const config = {
+    SON_COURT: { freq:700, dur:0.25 },
+    SON_LONG:  { freq:700, dur:0.6  }
+  };
   let s = config[event] || { freq:700, dur:0.2 };
   let osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
   osc.type = "sine"; osc.frequency.value = s.freq; gain.gain.value = 0.25;
@@ -98,8 +94,21 @@ function broadcastState() {
 }
 
 // ===================== PAVILLONS =====================
-function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, apert } = {}) {
-  currentState.flags = { orange, classFlag, prep, x, ap, bleu, n, a, apert };
+/**
+ * Met à jour les pavillons affichés
+ * orange    : Pavillon orange (ligne ouverte / arrivée)
+ * classFlag : Pavillon de classe (VNO)
+ * prep      : Préparatoire (P, I, U, BLACK)
+ * x         : Pavillon X (rappel individuel)
+ * ap        : 1er substitut (rappel général)
+ * bleu      : Pavillon bleu (ligne d'arrivée ouverte)
+ * n         : Pavillon N (annulation)
+ * a         : Pavillon A (plus de courses aujourd'hui)
+ * h         : Pavillon H (signaux à terre)
+ * apert     : Aperçu (retard)
+ */
+function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, h, apert } = {}) {
+  currentState.flags = { orange, classFlag, prep, x, ap, bleu, n, a, h, apert };
   let html = "";
   if (orange)    html += '<img src="images/Pav_orange.svg"  alt="Orange">';
   if (classFlag) html += '<img src="images/Pav_VNO.svg"     alt="Classe">';
@@ -109,9 +118,10 @@ function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, apert } = {})
   }
   if (x)     html += '<img src="images/Pav_X.svg"          alt="Rappel individuel">';
   if (ap)    html += '<img src="images/1er_substitut.svg"  alt="Rappel général">';
-  if (bleu)  html += '<img src="images/Pav_bleu.svg"      alt="Drapeau bleu">';
+  if (bleu)  html += '<img src="images/Pav_bleu.svg"       alt="Pavillon bleu">';
   if (n)     html += '<img src="images/Pav_N.svg"          alt="Pavillon N">';
   if (a)     html += '<img src="images/Pav_A.svg"          alt="Pavillon A">';
+  if (h)     html += '<img src="images/Pav_H.svg"          alt="Pavillon H">';
   if (apert) html += '<img src="images/Pav_apercu.svg"     alt="Aperçu">';
   document.getElementById("flags").innerHTML = html;
   broadcastState();
@@ -135,11 +145,11 @@ function openLineUI() {
   startProcedure(delay);
 }
 
-// ===================== APERÇU (RETARD AVANT DÉPART) =====================
+// ===================== APERÇU (RETARD) =====================
 /**
- * Aperçu = retard de départ avant T0
+ * RCV 27.3 — Aperçu = retard
  * 2 sons au hissage, 1 son à l'affalée
- * 1 min après affalée → signal d'avertissement (relance T-5)
+ * Relance signal avertissement 1 min après affalée
  */
 function sendApercu() {
   clearInterval(tProcedure);
@@ -151,16 +161,16 @@ function sendApercu() {
   document.getElementById("countdown").innerText = "";
   currentState.countdown = "";
   hideBtn("btnApercu");
-  // Bouton affalée avec libellé aperçu
   document.getElementById("btnAffalee").innerText = "🔽 Descendre l'aperçu (1 son)";
   showBtn("btnAffalee");
 }
 
-// ===================== AFFALÉE (APERÇU OU 1er SUBSTITUT) =====================
+// ===================== AFFALÉE UNIQUE (APERÇU / 1er SUBSTITUT / N) =====================
 /**
- * Bouton unique d'affalée — comportement selon contexte :
- * - "apercu"  : affalée du pavillon aperçu → relance procédure dans 1 min
- * - "general" : affalée du 1er substitut  → relance procédure dans 1 min
+ * Comportement selon affaleeContext :
+ * "apercu"  → relance T-5 dans 1 min
+ * "general" → relance T-5 dans 1 min (orange reste envoyé)
+ * "n"       → relance T-5 dans 1 min (orange reste envoyé)
  */
 function affaleeAction() {
   hideBtn("btnAffalee");
@@ -172,9 +182,13 @@ function affaleeAction() {
   } else if (affaleeContext === "general") {
     updateFlags({ orange:true });
     setHeader("⏳ Relance procédure dans 1 min");
+  } else if (affaleeContext === "n") {
+    // Après N seul : orange reste, relance dans 1 min
+    updateFlags({ orange:true });
+    setHeader("⏳ Signal avertissement dans 1 min");
   }
 
-  // Dans les 2 cas : compte à rebours 1 min → relance T-5
+  // Dans tous les cas : 1 min → relance T-5
   let sec = 60;
   clearInterval(tProcedure);
   tProcedure = setInterval(() => {
@@ -200,27 +214,36 @@ function startProcedure(sec) {
 }
 
 // ===================== T-5 SIGNAL AVERTISSEMENT =====================
+/**
+ * RCV 26 — 1 son au hissage du pavillon de classe
+ */
 function startProcedureUI() {
   showBtn("btnApercu");
-  setHeader("⚠️ Procèdure de départ — T-5");
+  setHeader("⚠️ Signal d'Avertissement — T-5");
   updateFlags({ orange:true, classFlag:true });
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   startStart(300);
 }
 
 // ===================== TIMER T-5 → T0 =====================
+/**
+ * RCV 26 :
+ * T-4 : hissage préparatoire — 1 son
+ * T-1 : affalée préparatoire — 1 son long
+ * T0  : affalée classe — 1 son (départ)
+ */
 function startStart(sec) {
   clearInterval(tStart);
   tStart = setInterval(() => {
     updateCountdown(sec, "DÉPART DANS");
 
-    // T-4 : Pavillon préparatoire
+    // T-4 : Signal préparatoire
     if (sec === 240) {
       updateFlags({ orange:true, classFlag:true, prep:document.getElementById("prepFlag").value });
       send({ type:"BEEP_COURT" }); playSound("SON_COURT");
     }
 
-    // T-1 : Affalée pavillon préparatoire
+    // T-1 : Affalée préparatoire
     if (sec === 60) {
       updateFlags({ orange:true, classFlag:true, prep:null });
       send({ type:"BEEP_LONG" }); playSound("SON_LONG");
@@ -252,34 +275,53 @@ function startRaceUI() {
   startRecallTimer(240);
 }
 
-// ===================== FERMETURE LIGNE (4 MIN) =====================
+// ===================== FERMETURE LIGNE 4 MIN (RCV 29.1) =====================
+/**
+ * RCV 29.1 : pavillon X affalé au plus tard 4 min après départ
+ * Pavillon orange affalé = fermeture ligne de départ
+ * Pavillon bleu envoyé = ligne d'arrivée ouverte (procédure arrivée FFVoile)
+ */
 function startRecallTimer(sec) {
   clearInterval(tRecall);
   tRecall = setInterval(() => {
     if (sec <= 0) {
       clearInterval(tRecall);
-      document.getElementById("countdown").innerText = "";
-      currentState.countdown = "";
+
+      // ✅ CORRECTION : retrait automatique rappel individuel à 4 min (RCV 29.1)
+      if (recallIndActive) {
+        recallIndActive = false;
+        clearTimeout(tRecallIndTimer);
+        setHeader("🔒 Ligne départ fermée");
+      } else {
+        setHeader("🔒 Ligne départ fermée");
+      }
+
       hideBtn("btnRecallInd");
       hideBtn("btnRecallGen");
       hideBtn("btnCancelRecallInd");
-      updateFlags({ orange:false });
+
+      // ✅ CORRECTION : orange affalé, pavillon bleu hissé à fermeture (procédure arrivée FFVoile)
       updateFlags({ bleu:true });
+
       lineOpen = false;
-      setHeader("🔒 Ligne départ fermée");
+
+      document.getElementById("countdown").innerText = "";
+      currentState.countdown = "";
+
+      // Bouton arrivée visible maintenant
       showBtn("btnFinish");
       return;
     }
-    updateCountdown(sec, "Fermeture ligne départ dans");
+    updateCountdown(sec, "Fermeture ligne dans");
     sec--;
   }, 1000);
 }
 
-// ===================== RAPPEL INDIVIDUEL =====================
+// ===================== RAPPEL INDIVIDUEL (RCV 29.1) =====================
 /**
- * Rappel individuel = Pavillon X
- * 1 son — le comité a ~45s pour l'identifier
- * Retrait manuel = 1 son — masque tous les boutons rappel après
+ * 1 son au hissage du pavillon X
+ * Pavillon X affalé automatiquement à 4 min (géré par startRecallTimer)
+ * ou manuellement avec 1 son
  */
 function recallIndividual() {
   send({ type:"RECALL_INDIVIDUAL" });
@@ -294,6 +336,8 @@ function handleRecallIndividual() {
   hideBtn("btnRecallInd");
   hideBtn("btnRecallGen");
   showBtn("btnCancelRecallInd");
+
+  // Alerte à 45s (délai recommandé)
   clearTimeout(tRecallIndTimer);
   tRecallIndTimer = setTimeout(() => {
     if (recallIndActive) setHeader("⚠️ Rappel individuel — 45s dépassées");
@@ -301,8 +345,8 @@ function handleRecallIndividual() {
 }
 
 /**
- * Retirer le rappel individuel
- * 1 son — masque tous les boutons rappel
+ * Retrait manuel rappel individuel — 1 son
+ * Masque tous les boutons rappel après (bateaux rappelés ou non identifiés)
  */
 function cancelRecallIndividual() {
   recallIndActive = false;
@@ -315,12 +359,11 @@ function cancelRecallIndividual() {
   hideBtn("btnRecallGen");
 }
 
-// ===================== RAPPEL GÉNÉRAL =====================
+// ===================== RAPPEL GÉNÉRAL (RCV 29.2) =====================
 /**
- * Rappel général = 1er substitut
- * 2 sons au hissage
- * ARRÊTE tous les timers de course (chrono, fermeture ligne)
- * Affalée = 1 son → relance procédure 1 min après
+ * 1er substitut — 2 sons au hissage
+ * Arrête tous les timers de course
+ * 1 son à l'affalée → relance procédure 1 min après
  */
 function recallGeneral() {
   send({ type:"RECALL_GENERAL" });
@@ -330,55 +373,59 @@ function recallGeneral() {
 function handleRecallGeneral() {
   recallGenActive = true;
 
-  // ARRÊTER tous les timers de course
+  // Arrêter tous les timers de course
   clearInterval(tRecall);
   clearInterval(tFinish);
   clearTimeout(tRecallIndTimer);
 
-  // Vider countdown ET heure de départ
+  // Vider countdown et heure de départ (départ annulé)
   document.getElementById("countdown").innerText        = "";
-  document.getElementById("startTimeDisplay").innerText = ""; // ← ajouter cette ligne
+  document.getElementById("startTimeDisplay").innerText = "";
   currentState.countdown = "";
-  raceStartTime = null; // ← réinitialiser aussi l'heure de départ
+  raceStartTime = null;
 
   updateFlags({ orange:true, ap:true });
   send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
   setHeader("🚨 Rappel général — En attente d'affalée");
 
-  // Masquer tous les boutons rappel et course
   hideBtn("btnRecallInd");
   hideBtn("btnRecallGen");
   hideBtn("btnCancelRecallInd");
   hideBtn("btnFinish");
 
+  // Alerte à 105s (délai recommandé)
   clearTimeout(tRecallGenTimer);
   tRecallGenTimer = setTimeout(() => {
     if (recallGenActive) setHeader("🚨 Rappel général — 105s dépassées");
   }, 105000);
 
-  // Bouton affalée avec libellé 1er substitut
   affaleeContext = "general";
   document.getElementById("btnAffalee").innerText = "🔽 Descendre le 1er substitut (1 son)";
   showBtn("btnAffalee");
 }
 
 // ===================== ARRIVÉES =====================
-function finishRace() { send({ type:"FINISH" }); handleFinish(); }
+function finishRace() {
+  send({ type:"FINISH" });
+  handleFinish();
+}
 
 function handleFinish() {
   let now = new Date();
 
+  // Premier arrivant : lancer le timer temps limite
+  // Le pavillon bleu est déjà hissé depuis la fermeture de ligne
   if (!finishStarted) {
     finishStarted = true;
-   
     let sec = parseInt(document.getElementById("finishLimit").value || 20) * 60;
     setHeader("🏁 Arrivées en cours");
     clearInterval(tFinish);
     tFinish = setInterval(() => {
       if (sec <= 0) {
         clearInterval(tFinish);
-        updateFlags({ orange:false });
-        setHeader("⛔ Course terminée");
+        // Affalée pavillon bleu et orange = fermeture ligne d'arrivée
+        updateFlags({});
+        setHeader("⛔ Ligne d'arrivée fermée");
         document.getElementById("countdown").innerText = "";
         currentState.countdown = "";
         broadcastState();
@@ -391,8 +438,10 @@ function handleFinish() {
     }, 1000);
   }
 
+  // 1 son à chaque arrivée (courtoisie, non obligatoire selon FFVoile)
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
 
+  // Calcul temps de course
   let elapsedMs = now - raceStartTime;
   let totalSec  = Math.floor(elapsedMs / 1000);
   let raceTime  = `${Math.floor(totalSec/60)}:${(totalSec%60).toString().padStart(2,"0")}`;
@@ -423,39 +472,93 @@ function goToSetup() {
   resetAll();
 }
 
-function cancelRace() {
+// ===================== ANNULATION N SEUL (RCV 27.3) =====================
+/**
+ * N seul = annulation, retour zone départ
+ * Orange RESTE envoyé
+ * 3 sons
+ * Signal avertissement 1 min après affalée du N
+ */
+function cancelRaceN() {
   hideCancelMenu();
   clearInterval(tProcedure); clearInterval(tStart);
   clearInterval(tRecall);    clearInterval(tFinish);
-  updateFlags({ a:true, n:true });
+
+  // Orange reste, N envoyé
+  updateFlags({ orange:true, n:true });
   playSequence("SON_COURT", 3, 500);
   send({ type:"BEEP_TRIPLE" });
-  setHeader("🚫 Course annulée — Pav. N/A");
+  setHeader("🚫 Annulation — Pav. N (retour zone départ)");
+
   document.getElementById("countdown").innerText = "";
   currentState.countdown = "";
+  document.getElementById("startTimeDisplay").innerText = "";
   broadcastState();
+
   document.getElementById("raceBtns").style.display = "none";
   hideBtn("btnApercu"); hideBtn("btnAffalee"); hideBtn("btnFinish");
-  showBtn("btnRestart");
-  raceEnded = true;
+
+  // Bouton affalée du N → relance dans 1 min
+  affaleeContext = "n";
+  document.getElementById("btnAffalee").innerText = "🔽 Descendre Pav. N (1 son) → relance dans 1 min";
+  showBtn("btnAffalee");
+
+  raceEnded = false; // relance possible
 }
 
-function endRegatta() {
+// ===================== ANNULATION N SUR H (RCV 32.1) =====================
+/**
+ * N/H = toutes courses annulées, signaux ultérieurs à terre
+ * 3 sons
+ */
+function cancelRaceNH() {
   hideCancelMenu();
   clearInterval(tProcedure); clearInterval(tStart);
   clearInterval(tRecall);    clearInterval(tFinish);
-  updateFlags({ a:true, n:true });
+
+  updateFlags({ n:true, h:true });
   playSequence("SON_COURT", 3, 500);
   send({ type:"BEEP_TRIPLE" });
-  setHeader("🏴 Régate terminée — Pav. N/A");
+  setHeader("🏠 Pav. N/H — Signaux ultérieurs à terre");
+
   document.getElementById("countdown").innerText = "";
   currentState.countdown = "";
+  document.getElementById("startTimeDisplay").innerText = "";
   broadcastState();
+
   document.getElementById("raceBtns").style.display = "none";
   hideBtn("btnApercu"); hideBtn("btnAffalee"); hideBtn("btnFinish");
+
   raceEnded = true;
 }
 
+// ===================== FIN DE RÉGATE N SUR A (RCV 32.1) =====================
+/**
+ * N/A = toutes courses annulées, plus de courses aujourd'hui
+ * 3 sons
+ */
+function endRegattaNA() {
+  hideCancelMenu();
+  clearInterval(tProcedure); clearInterval(tStart);
+  clearInterval(tRecall);    clearInterval(tFinish);
+
+  updateFlags({ n:true, a:true });
+  playSequence("SON_COURT", 3, 500);
+  send({ type:"BEEP_TRIPLE" });
+  setHeader("🏴 Pav. N/A — Plus de courses aujourd'hui");
+
+  document.getElementById("countdown").innerText = "";
+  currentState.countdown = "";
+  document.getElementById("startTimeDisplay").innerText = "";
+  broadcastState();
+
+  document.getElementById("raceBtns").style.display = "none";
+  hideBtn("btnApercu"); hideBtn("btnAffalee"); hideBtn("btnFinish");
+
+  raceEnded = true;
+}
+
+// ===================== RELANCER UNE COURSE =====================
 function relancerCourse() {
   hideCancelMenu();
   _resetRaceData();
@@ -510,7 +613,7 @@ function resetAll() {
   clearInterval(tProcedure); clearInterval(tStart);
   clearInterval(tRecall);    clearInterval(tFinish);
   clearTimeout(tRecallIndTimer); clearTimeout(tRecallGenTimer);
-  finishStarted   = false; finishList = []; raceStartTime = null;
+  finishStarted = false; finishList = []; raceStartTime = null;
   recallIndActive = false; recallGenActive = false;
   lineOpen = false; raceEnded = false; affaleeContext = "";
 
