@@ -9,9 +9,18 @@
 <body>
 <div class="app">
 
+<!-- LOGO CLUB — fixe en haut -->
+<div id="logoBar">
+  <img src="images/logo.jpg" alt="Logo CBVS">
+  <span>Régate CVBS</span>
+ <img src="images/logo.jpg" alt="Logo CBVS">
+</div>
+
+
   <!-- HEADER -->
   <div id="header">⛵ Paramétrage Régate ⛵</div>
-
+    <!-- FOOTER -->
+  
   <!-- STATUS CONNEXION -->
   <div id="status">...</div>
 
@@ -53,12 +62,15 @@
   <!-- Visible dès ouverture jusqu'à T0 -->
   <!-- ===================== -->
   <button id="btnApercu" class="btn-warning" onclick="sendApercu()" style="display:none;">
-    ⚓ Aperçu — Retard de départ (2 sons)
+    ⚓ Aperçu — Retard de départ
   </button>
 
-  <!-- AFFALÉE APERÇU -->
-  <button id="btnAffaleeApercu" class="btn-warning" onclick="affaleeApercu()" style="display:none;">
-    🔽 Affalée aperçu (1 son) → relance dans 1 min
+  <!-- ===================== -->
+  <!-- BOUTON AFFALÉE UNIQUE -->
+  <!-- Libellé changé selon contexte (aperçu ou rappel général) -->
+  <!-- ===================== -->
+  <button id="btnAffalee" class="btn-warning" onclick="affaleeAction()" style="display:none;">
+    🔽 Descendre le pavillon
   </button>
 
   <!-- ===================== -->
@@ -67,20 +79,20 @@
   <div id="raceBtns" style="display:none;">
 
     <button id="btnRecallInd" onclick="recallIndividual()">
-      🚩 Rappel individuel (1 son)
+      🚩 Rappel individuel
     </button>
 
     <button id="btnCancelRecallInd" class="btn-success" onclick="cancelRecallIndividual()" style="display:none;">
-      ✅ Retirer rappel individuel (1 son)
+      ✅ Retirer rappel individuel
     </button>
 
     <button id="btnRecallGen" onclick="recallGeneral()">
-      🚨 Rappel général (2 sons)
+      🚨 Rappel général
     </button>
 
     <!-- Arrivée — visible seulement après fermeture de ligne -->
     <button id="btnFinish" class="btn-finish" onclick="finishRace()" style="display:none;">
-      🏁 Arrivée (1 son)
+      🏁 Arrivée
     </button>
 
     <!-- Relancer procédure après annulation -->
@@ -95,7 +107,7 @@
 
   <!-- ===================== -->
   <!-- BOUTON OPTIONS        -->
-  <!-- Caché pendant paramétrage, visible dès ouverture ligne -->
+  <!-- Caché pendant paramétrage -->
   <!-- ===================== -->
   <button id="btnOptions" class="btn-secondary" onclick="cancelAll()" style="display:none;">
     ⚙️ Options / Annuler
@@ -112,11 +124,11 @@
     </button>
 
     <button class="btn-danger" onclick="cancelRace()">
-      🚫 Annuler la course (Pav. N/A — 3 sons)
+      🚫 Annuler la course en cours
     </button>
 
     <button class="btn-danger" onclick="endRegatta()">
-      🏴 Terminer la régate (Pav. N/A — 3 sons)
+      🏴 Terminer la régate
     </button>
 
     <!-- Visible seulement après fin/annulation -->
@@ -128,7 +140,9 @@
       ↩️ Fermer ce menu
     </button>
   </div>
-
+  <div id="footer">
+  Développé par <strong>Sébastien RABAUD</strong> — CVBS © 2026
+    </div>
 </div>
 <script src="script.js"></script>
 </body>

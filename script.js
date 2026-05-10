@@ -1,11 +1,12 @@
 /**
  * SCRIPT DE GESTION DE RÉGATE - CVBS
- * Version 4.0
+ * Version 5.0
  *
- * Corrections v4 :
- * - Broadcast état complet à chaque changement (display.html se met à jour en temps réel)
- * - Bouton Options/Annuler caché pendant le paramétrage, visible après ouverture ligne
- * - Fix display.html : reçoit l'état immédiatement à la connexion
+ * Modifications v5 :
+ * - Rappel général : arrête tous les timers de course
+ * - Affalée 1er substitut (rappel général) : 1 son → relance procédure 1 min après
+ * - Renommage bouton "Affalée aperçu" → contexte selon usage (aperçu ou rappel général)
+ * - Nettoyage et cohérence générale
  */
 
 let ws, connected = false, mockMode = false;
@@ -19,9 +20,17 @@ let currentState = {
 
 let tProcedure, tStart, tRecall, tFinish, tRecallIndTimer, tRecallGenTimer;
 
-let finishStarted = false, raceStartTime = null, finishList = [];
-let recallIndActive = false, recallGenActive = false;
-let lineOpen = false, raceEnded = false;
+let finishStarted   = false;
+let raceStartTime   = null;
+let finishList      = [];
+let recallIndActive = false;
+let recallGenActive = false;
+let lineOpen        = false;
+let raceEnded       = false;
+
+// Contexte du bouton "Descendre pavillon" :
+// "apercu" ou "general" — détermine le comportement à l'affalée
+let affaleeContext  = "";
 
 // ===================== AUDIO =====================
 let audioCtx;
@@ -53,7 +62,6 @@ function connectWS() {
       connected = true;
       clearTimeout(timeout);
       setStatus("🟢 ESP32 connecté");
-      // Envoyer l'état actuel dès la connexion
       broadcastState();
     };
     ws.onerror = ws.onclose = () => enableMock();
@@ -62,14 +70,17 @@ function connectWS() {
       if (d.type === "RESET")             resetAll();
       if (d.type === "RECALL_INDIVIDUAL") handleRecallIndividual();
       if (d.type === "RECALL_GENERAL")    handleRecallGeneral();
-      // Quand display.html se connecte, il envoie REQUEST_STATE
       if (d.type === "REQUEST_STATE")     broadcastState();
     };
   } catch(e) { enableMock(); }
 }
 connectWS();
 
-function enableMock() { if (mockMode) return; mockMode = true; setStatus("⚠️ Mode simulation PC"); }
+function enableMock() {
+  if (mockMode) return;
+  mockMode = true;
+  setStatus("⚠️ Mode simulation PC");
+}
 function setStatus(t) { document.getElementById("status").innerText = t; }
 
 function send(msg) {
@@ -77,9 +88,6 @@ function send(msg) {
   if (connected) ws.send(JSON.stringify(msg));
 }
 
-/**
- * Diffuse l'état complet à tous les clients connectés (dont display.html)
- */
 function broadcastState() {
   send({
     type:      "STATE",
@@ -99,12 +107,12 @@ function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, apert } = {})
     let file = { "P":"Pav_P.svg","I":"Pav_I.svg","U":"Pav_U.svg","BLACK":"Pav_noir.svg" }[prep];
     if (file) html += `<img src="images/${file}" alt="${prep}">`;
   }
-  if (x)     html += '<img src="images/Pav_X.svg"         alt="Rappel individuel">';
-  if (ap)    html += '<img src="images/1er_substitut.svg" alt="Rappel général">';
-  if (bleu)  html += '<img src="images/Pav_bleur.svg" alt="Drapeau bleu">';
-  if (n)     html += '<img src="images/Pav_N.svg"         alt="Pavillon N">';
-  if (a)     html += '<img src="images/Pav_A.svg"         alt="Pavillon A">';
-  if (apert) html += '<img src="images/Pav_A.svg"    alt="Aperçu">';
+  if (x)     html += '<img src="images/Pav_X.svg"          alt="Rappel individuel">';
+  if (ap)    html += '<img src="images/1er_substitut.svg"  alt="Rappel général">';
+  if (bleu)  html += '<img src="images/Pav_bleu.svg"      alt="Drapeau bleu">';
+  if (n)     html += '<img src="images/Pav_N.svg"          alt="Pavillon N">';
+  if (a)     html += '<img src="images/Pav_A.svg"          alt="Pavillon A">';
+  if (apert) html += '<img src="images/Pav_apercu.svg"     alt="Aperçu">';
   document.getElementById("flags").innerHTML = html;
   broadcastState();
 }
@@ -118,10 +126,7 @@ function openLine() {
 function openLineUI() {
   hideSetup();
   raceEnded = false;
-
-  // Afficher le bouton Options maintenant que la course est lancée
   showBtn("btnOptions");
-
   let delay = parseInt(document.getElementById("openToProcedure").value || 1) * 60;
   setHeader("🚩 Ligne ouverte");
   updateFlags({ orange:true });
@@ -130,30 +135,58 @@ function openLineUI() {
   startProcedure(delay);
 }
 
-// ===================== APERÇU =====================
+// ===================== APERÇU (RETARD AVANT DÉPART) =====================
+/**
+ * Aperçu = retard de départ avant T0
+ * 2 sons au hissage, 1 son à l'affalée
+ * 1 min après affalée → signal d'avertissement (relance T-5)
+ */
 function sendApercu() {
-  clearInterval(tProcedure); clearInterval(tStart);
+  clearInterval(tProcedure);
+  clearInterval(tStart);
+  affaleeContext = "apercu";
   setHeader("⚓ Aperçu — Retard de départ");
   updateFlags({ orange:true, apert:true });
   send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
   document.getElementById("countdown").innerText = "";
   currentState.countdown = "";
   hideBtn("btnApercu");
-  showBtn("btnAffaleeApercu");
+  // Bouton affalée avec libellé aperçu
+  document.getElementById("btnAffalee").innerText = "🔽 Descendre l'aperçu (1 son)";
+  showBtn("btnAffalee");
 }
 
-function affaleeApercu() {
-  hideBtn("btnAffaleeApercu");
-  updateFlags({ orange:true });
+// ===================== AFFALÉE (APERÇU OU 1er SUBSTITUT) =====================
+/**
+ * Bouton unique d'affalée — comportement selon contexte :
+ * - "apercu"  : affalée du pavillon aperçu → relance procédure dans 1 min
+ * - "general" : affalée du 1er substitut  → relance procédure dans 1 min
+ */
+function affaleeAction() {
+  hideBtn("btnAffalee");
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
-  setHeader("⏳ Signal avertissement dans 1 min");
+
+  if (affaleeContext === "apercu") {
+    updateFlags({ orange:true });
+    setHeader("⏳ Signal avertissement dans 1 min");
+  } else if (affaleeContext === "general") {
+    updateFlags({ orange:true });
+    setHeader("⏳ Relance procédure dans 1 min");
+  }
+
+  // Dans les 2 cas : compte à rebours 1 min → relance T-5
   let sec = 60;
   clearInterval(tProcedure);
   tProcedure = setInterval(() => {
     updateCountdown(sec, "Signal avertissement dans");
-    if (sec <= 0) { clearInterval(tProcedure); startProcedureUI(); }
+    if (sec <= 0) {
+      clearInterval(tProcedure);
+      startProcedureUI();
+    }
     sec--;
   }, 1000);
+
+  affaleeContext = "";
 }
 
 // ===================== PROCÉDURE =====================
@@ -166,9 +199,10 @@ function startProcedure(sec) {
   }, 1000);
 }
 
+// ===================== T-5 SIGNAL AVERTISSEMENT =====================
 function startProcedureUI() {
   showBtn("btnApercu");
-  setHeader("⚠️ Signal d'Avertissement — T-5");
+  setHeader("⚠️ Procèdure de départ — T-5");
   updateFlags({ orange:true, classFlag:true });
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   startStart(300);
@@ -179,33 +213,46 @@ function startStart(sec) {
   clearInterval(tStart);
   tStart = setInterval(() => {
     updateCountdown(sec, "DÉPART DANS");
+
+    // T-4 : Pavillon préparatoire
     if (sec === 240) {
       updateFlags({ orange:true, classFlag:true, prep:document.getElementById("prepFlag").value });
       send({ type:"BEEP_COURT" }); playSound("SON_COURT");
     }
+
+    // T-1 : Affalée pavillon préparatoire
     if (sec === 60) {
       updateFlags({ orange:true, classFlag:true, prep:null });
       send({ type:"BEEP_LONG" }); playSound("SON_LONG");
     }
-    if (sec === 0) { clearInterval(tStart); hideBtn("btnApercu"); startRaceUI(); return; }
+
+    // T0 : DÉPART
+    if (sec === 0) {
+      clearInterval(tStart);
+      hideBtn("btnApercu");
+      startRaceUI();
+      return;
+    }
     sec--;
   }, 1000);
 }
 
-// ===================== COURSE =====================
+// ===================== COURSE EN COURS =====================
 function startRaceUI() {
   setHeader("🏁 Course en cours");
   updateFlags({ orange:true });
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
-  lineOpen = true;
+  lineOpen      = true;
   raceStartTime = new Date();
-  document.getElementById("startTimeDisplay").innerText = "⏱ Départ officiel : " + raceStartTime.toLocaleTimeString();
+  document.getElementById("startTimeDisplay").innerText =
+    "⏱ Départ officiel : " + raceStartTime.toLocaleTimeString();
   document.getElementById("raceBtns").style.display = "block";
-  showBtn("btnRecallInd"); showBtn("btnRecallGen");
+  showBtn("btnRecallInd");
+  showBtn("btnRecallGen");
   startRecallTimer(240);
 }
 
-// ===================== FERMETURE LIGNE =====================
+// ===================== FERMETURE LIGNE (4 MIN) =====================
 function startRecallTimer(sec) {
   clearInterval(tRecall);
   tRecall = setInterval(() => {
@@ -213,35 +260,50 @@ function startRecallTimer(sec) {
       clearInterval(tRecall);
       document.getElementById("countdown").innerText = "";
       currentState.countdown = "";
-      hideBtn("btnRecallInd"); hideBtn("btnRecallGen"); hideBtn("btnCancelRecallInd");
+      hideBtn("btnRecallInd");
+      hideBtn("btnRecallGen");
+      hideBtn("btnCancelRecallInd");
       updateFlags({ orange:false });
+      updateFlags({ bleu:true });
       lineOpen = false;
-      setHeader("🔒 Ligne fermée");
+      setHeader("🔒 Ligne départ fermée");
       showBtn("btnFinish");
       return;
     }
-    updateCountdown(sec, "Fermeture ligne dans");
+    updateCountdown(sec, "Fermeture ligne départ dans");
     sec--;
   }, 1000);
 }
 
 // ===================== RAPPEL INDIVIDUEL =====================
-function recallIndividual() { send({ type:"RECALL_INDIVIDUAL" }); handleRecallIndividual(); }
+/**
+ * Rappel individuel = Pavillon X
+ * 1 son — le comité a ~45s pour l'identifier
+ * Retrait manuel = 1 son — masque tous les boutons rappel après
+ */
+function recallIndividual() {
+  send({ type:"RECALL_INDIVIDUAL" });
+  handleRecallIndividual();
+}
 
 function handleRecallIndividual() {
   recallIndActive = true;
   updateFlags({ orange:true, x:true });
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   setHeader("⚠️ Rappel individuel");
+  hideBtn("btnRecallInd");
   hideBtn("btnRecallGen");
   showBtn("btnCancelRecallInd");
-  hideBtn("btnRecallInd");
   clearTimeout(tRecallIndTimer);
   tRecallIndTimer = setTimeout(() => {
     if (recallIndActive) setHeader("⚠️ Rappel individuel — 45s dépassées");
   }, 45000);
 }
 
+/**
+ * Retirer le rappel individuel
+ * 1 son — masque tous les boutons rappel
+ */
 function cancelRecallIndividual() {
   recallIndActive = false;
   clearTimeout(tRecallIndTimer);
@@ -254,19 +316,50 @@ function cancelRecallIndividual() {
 }
 
 // ===================== RAPPEL GÉNÉRAL =====================
-function recallGeneral() { send({ type:"RECALL_GENERAL" }); handleRecallGeneral(); }
+/**
+ * Rappel général = 1er substitut
+ * 2 sons au hissage
+ * ARRÊTE tous les timers de course (chrono, fermeture ligne)
+ * Affalée = 1 son → relance procédure 1 min après
+ */
+function recallGeneral() {
+  send({ type:"RECALL_GENERAL" });
+  handleRecallGeneral();
+}
 
 function handleRecallGeneral() {
   recallGenActive = true;
+
+  // ARRÊTER tous les timers de course
+  clearInterval(tRecall);
+  clearInterval(tFinish);
+  clearTimeout(tRecallIndTimer);
+
+  // Vider countdown ET heure de départ
+  document.getElementById("countdown").innerText        = "";
+  document.getElementById("startTimeDisplay").innerText = ""; // ← ajouter cette ligne
+  currentState.countdown = "";
+  raceStartTime = null; // ← réinitialiser aussi l'heure de départ
+
   updateFlags({ orange:true, ap:true });
   send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
-  setHeader("🚨 Rappel général");
-  hideBtn("btnRecallInd"); hideBtn("btnCancelRecallInd");
+  setHeader("🚨 Rappel général — En attente d'affalée");
+
+  // Masquer tous les boutons rappel et course
+  hideBtn("btnRecallInd");
+  hideBtn("btnRecallGen");
+  hideBtn("btnCancelRecallInd");
+  hideBtn("btnFinish");
+
   clearTimeout(tRecallGenTimer);
   tRecallGenTimer = setTimeout(() => {
     if (recallGenActive) setHeader("🚨 Rappel général — 105s dépassées");
   }, 105000);
-  showBtn("btnAffaleeApercu");
+
+  // Bouton affalée avec libellé 1er substitut
+  affaleeContext = "general";
+  document.getElementById("btnAffalee").innerText = "🔽 Descendre le 1er substitut (1 son)";
+  showBtn("btnAffalee");
 }
 
 // ===================== ARRIVÉES =====================
@@ -274,9 +367,10 @@ function finishRace() { send({ type:"FINISH" }); handleFinish(); }
 
 function handleFinish() {
   let now = new Date();
+
   if (!finishStarted) {
     finishStarted = true;
-    updateFlags({ bleu:true });
+   
     let sec = parseInt(document.getElementById("finishLimit").value || 20) * 60;
     setHeader("🏁 Arrivées en cours");
     clearInterval(tFinish);
@@ -296,7 +390,9 @@ function handleFinish() {
       sec--;
     }, 1000);
   }
+
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
+
   let elapsedMs = now - raceStartTime;
   let totalSec  = Math.floor(elapsedMs / 1000);
   let raceTime  = `${Math.floor(totalSec/60)}:${(totalSec%60).toString().padStart(2,"0")}`;
@@ -317,6 +413,7 @@ function showCancelMenu() {
   document.getElementById("menuRelancerCourse").style.display = raceEnded ? "block" : "none";
   document.getElementById("cancelMenu").style.display = "block";
 }
+
 function hideCancelMenu() {
   document.getElementById("cancelMenu").style.display = "none";
 }
@@ -338,7 +435,7 @@ function cancelRace() {
   currentState.countdown = "";
   broadcastState();
   document.getElementById("raceBtns").style.display = "none";
-  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu"); hideBtn("btnFinish");
+  hideBtn("btnApercu"); hideBtn("btnAffalee"); hideBtn("btnFinish");
   showBtn("btnRestart");
   raceEnded = true;
 }
@@ -355,7 +452,7 @@ function endRegatta() {
   currentState.countdown = "";
   broadcastState();
   document.getElementById("raceBtns").style.display = "none";
-  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu"); hideBtn("btnFinish");
+  hideBtn("btnApercu"); hideBtn("btnAffalee"); hideBtn("btnFinish");
   raceEnded = true;
 }
 
@@ -363,7 +460,7 @@ function relancerCourse() {
   hideCancelMenu();
   _resetRaceData();
   hideBtn("btnRestart"); hideBtn("btnFinish");
-  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu"); hideBtn("btnCancelRecallInd");
+  hideBtn("btnApercu");  hideBtn("btnAffalee"); hideBtn("btnCancelRecallInd");
   document.getElementById("raceBtns").style.display = "block";
   showBtn("btnRecallInd"); showBtn("btnRecallGen");
   openLineUI();
@@ -380,11 +477,10 @@ function restartProcedure() {
   startProcedure(delay);
 }
 
-// Réinitialise uniquement les données de course (pas l'UI globale)
 function _resetRaceData() {
-  finishStarted = false; finishList = []; raceStartTime = null;
+  finishStarted   = false; finishList = []; raceStartTime = null;
   recallIndActive = false; recallGenActive = false;
-  lineOpen = false; raceEnded = false;
+  lineOpen = false; raceEnded = false; affaleeContext = "";
   document.getElementById("finishList").innerHTML       = "";
   document.getElementById("startTimeDisplay").innerHTML = "";
   document.getElementById("countdown").innerText        = "";
@@ -414,12 +510,12 @@ function resetAll() {
   clearInterval(tProcedure); clearInterval(tStart);
   clearInterval(tRecall);    clearInterval(tFinish);
   clearTimeout(tRecallIndTimer); clearTimeout(tRecallGenTimer);
-  finishStarted = false; finishList = []; raceStartTime = null;
+  finishStarted   = false; finishList = []; raceStartTime = null;
   recallIndActive = false; recallGenActive = false;
-  lineOpen = false; raceEnded = false;
+  lineOpen = false; raceEnded = false; affaleeContext = "";
 
   setHeader("⛵ Paramétrage Régate ⛵");
-  currentState.flags    = {};
+  currentState.flags     = {};
   currentState.countdown = "";
 
   document.getElementById("raceBtns").style.display     = "none";
@@ -429,8 +525,8 @@ function resetAll() {
   document.getElementById("startTimeDisplay").innerHTML = "";
   document.getElementById("cancelMenu").style.display   = "none";
 
-  hideBtn("btnOptions");        // cacher le bouton Options pendant le paramétrage
-  hideBtn("btnApercu"); hideBtn("btnAffaleeApercu");
+  hideBtn("btnOptions");
+  hideBtn("btnApercu"); hideBtn("btnAffalee");
   hideBtn("btnCancelRecallInd"); hideBtn("btnFinish"); hideBtn("btnRestart");
   showBtn("btnRecallInd"); showBtn("btnRecallGen");
 
