@@ -24,6 +24,21 @@ let recallGenActive = false;
 let lineOpen        = false;
 let raceEnded       = false;
 let affaleeContext  = ""; // "apercu" ou "general" ou "n"
+let proVoice = null;
+let currentVoice = null;
+// ===================== VOIX =====================
+function playVoice(fichier) {
+
+  if (currentVoice) {
+    currentVoice.pause();
+    currentVoice.currentTime = 0;
+  }
+
+  currentVoice = new Audio("voix/" + fichier);
+
+  currentVoice.play().catch(e => console.log("Audio:", e));
+}
+
 
 // ===================== AUDIO =====================
 let audioCtx;
@@ -47,6 +62,8 @@ function playSound(event) {
 function playSequence(event, count, gap = 400) {
   for (let i = 0; i < count; i++) setTimeout(() => playSound(event), i * gap);
 }
+
+
 
 // ===================== WEBSOCKET =====================
 let timeout = setTimeout(() => { if (!connected) enableMock(); }, 1500);
@@ -208,10 +225,21 @@ function startProcedure(sec) {
   clearInterval(tProcedure);
   tProcedure = setInterval(() => {
     updateCountdown(sec, "Procédure de départ dans");
+    if (sec === 30) playVoice("signal_preparatoire_30s.ogg"); 
+    if (sec === 10) playVoice("dix.ogg");
+    if (sec === 9) playVoice("neuf.ogg");
+    if (sec === 8) playVoice("huit.ogg");
+    if (sec === 7) playVoice("sept.ogg");
+    if (sec === 6) playVoice("six.ogg");
+    if (sec === 5) playVoice("cinq.ogg");
+    if (sec === 4) playVoice("quatre.ogg");
+    if (sec === 3) playVoice("trois.ogg");
+    if (sec === 2) playVoice("deux.ogg");
+    if (sec === 1) playVoice("un.ogg");
     if (sec <= 0) { clearInterval(tProcedure); startProcedureUI(); }
     sec--;
   }, 1000);
-}
+}   
 
 // ===================== T-5 SIGNAL AVERTISSEMENT =====================
 /**
@@ -237,29 +265,68 @@ function startStart(sec) {
   tStart = setInterval(() => {
     updateCountdown(sec, "DÉPART DANS");
 
-    // T-4 : Signal préparatoire
+    // 1. Alerte 30s avant le préparatoire (T-4:30) puis décompte les 10 dernières secondes
+    if (sec === 272) playVoice("signal_avertissement_30s.ogg");
+    if (sec === 250) playVoice("dix.ogg");
+    if (sec === 249) playVoice("neuf.ogg");
+    if (sec === 248) playVoice("huit.ogg");
+    if (sec === 247) playVoice("sept.ogg");
+    if (sec === 246) playVoice("six.ogg");
+    if (sec === 245) playVoice("cinq.ogg");
+    if (sec === 244) playVoice("quatre.ogg");
+    if (sec === 243) playVoice("trois.ogg");
+    if (sec === 242) playVoice("deux.ogg");
+    if (sec === 241) playVoice("un.ogg");
+    // 2. Signal préparatoire (T-4)
     if (sec === 240) {
       updateFlags({ orange:true, classFlag:true, prep:document.getElementById("prepFlag").value });
       send({ type:"BEEP_COURT" }); playSound("SON_COURT");
+      
     }
 
-    // T-1 : Affalée préparatoire
+    // 3. Alerte 30s avant affalée préparatoire (T-1:30)  puis décompte les 10 dernières secondes
+    if (sec === 93) playVoice("affalee_avertissement_30s.ogg");
+    if (sec === 70) playVoice("dix.ogg");
+    if (sec === 69) playVoice("neuf.ogg");
+    if (sec === 68) playVoice("huit.ogg");
+    if (sec === 67) playVoice("sept.ogg");
+    if (sec === 66) playVoice("six.ogg");
+    if (sec === 65) playVoice("cinq.ogg");
+    if (sec === 64) playVoice("quatre.ogg");
+    if (sec === 63) playVoice("trois.ogg");
+    if (sec === 62) playVoice("deux.ogg");
+    if (sec === 61) playVoice("un.ogg");
+    // 4. Une minute (T-1)
     if (sec === 60) {
       updateFlags({ orange:true, classFlag:true, prep:null });
       send({ type:"BEEP_LONG" }); playSound("SON_LONG");
+     // announce("Attention... une minute avant le départ");
     }
 
-    // T0 : DÉPART
+    // 5. Décompte final 10 à 1 (Très réactif)
+    if (sec === 32) playVoice("depart_30s.ogg");
+    if (sec === 10) playVoice("dix.ogg");
+    if (sec === 9) playVoice("neuf.ogg");
+    if (sec === 8) playVoice("huit.ogg");
+    if (sec === 7) playVoice("sept.ogg");
+    if (sec === 6) playVoice("six.ogg");
+    if (sec === 5) playVoice("cinq.ogg");
+    if (sec === 4) playVoice("quatre.ogg");
+    if (sec === 3) playVoice("trois.ogg");
+    if (sec === 2) playVoice("deux.ogg");
+    if (sec === 1) playVoice("un.ogg");
+
+    // 6. TOP DÉPART (T0)
     if (sec === 0) {
       clearInterval(tStart);
       hideBtn("btnApercu");
       startRaceUI();
+    //  announce("Top ! Départ !");
       return;
     }
     sec--;
   }, 1000);
 }
-
 // ===================== COURSE EN COURS =====================
 function startRaceUI() {
   setHeader("🏁 Course en cours");
@@ -283,7 +350,21 @@ function startRaceUI() {
  */
 function startRecallTimer(sec) {
   clearInterval(tRecall);
+ 
+
   tRecall = setInterval(() => {
+// 5. Décompte final 10 à 1 (Très réactif)
+    if (sec === 30) playVoice("affalee_orange_30s.ogg");
+    if (sec === 10) playVoice("dix.ogg");
+    if (sec === 9) playVoice("neuf.ogg");
+    if (sec === 8) playVoice("huit.ogg");
+    if (sec === 7) playVoice("sept.ogg");
+    if (sec === 6) playVoice("six.ogg");
+    if (sec === 5) playVoice("cinq.ogg");
+    if (sec === 4) playVoice("quatre.ogg");
+    if (sec === 3) playVoice("trois.ogg");
+    if (sec === 2) playVoice("deux.ogg");
+    if (sec === 1) playVoice("un.ogg");
     if (sec <= 0) {
       clearInterval(tRecall);
 
