@@ -7,21 +7,20 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
 <div class="app">
 
-<!-- LOGO CLUB — fixe en haut -->
-<div id="logoBar">
-  <img src="images/logo.jpg" alt="Logo CBVS">
-  <span>Régate CVBS</span>
- <img src="images/logo.jpg" alt="Logo CBVS">
-</div>
-
+  <!-- LOGO CLUB -->
+  <div id="logoBar">
+    <img src="images/logo.jpg" alt="Logo CBVS">
+    <span>Régate CBVS</span>
+    <img src="images/logo.jpg" alt="Logo CBVS">
+  </div>
 
   <!-- HEADER -->
   <div id="header">⛵ Paramétrage Régate ⛵</div>
-    <!-- FOOTER -->
-  
-  <!-- STATUS CONNEXION -->
+
+  <!-- STATUS -->
   <div id="status">...</div>
 
   <!-- FANIONS -->
@@ -30,13 +29,14 @@
   <!-- COUNTDOWN -->
   <div id="countdown"></div>
 
-  <!-- HEURE DÉPART OFFICIEL -->
+  <!-- HEURE DEPART -->
   <div id="startTimeDisplay"></div>
 
   <!-- ===================== -->
-  <!-- SETUP : Paramètres    -->
+  <!-- PARAMETRES -->
   <!-- ===================== -->
   <div id="setup" class="panel">
+
     <h2>⚙️ Paramètres</h2>
 
     <label>Fanion préparatoire</label>
@@ -52,29 +52,42 @@
 
     <label>Temps limite arrivée (min)</label>
     <input type="number" id="finishLimit" value="20" min="1" max="120">
+
   </div>
 
-  <!-- BOUTON OUVERTURE LIGNE -->
-  <button id="openBtn" onclick="openLine()">🚩 Ouvrir la ligne</button>
+  <!-- ===================== -->
+  <!-- OUVERTURE -->
+  <!-- ===================== -->
+  <button id="openBtn" onclick="openLine()">
+    🚩 Ouvrir la ligne
+  </button>
 
   <!-- ===================== -->
-  <!-- APERÇU (retard)       -->
-  <!-- Visible dès ouverture jusqu'à T0 -->
+  <!-- APERÇU -->
   <!-- ===================== -->
-  <button id="btnApercu" class="btn-warning" onclick="sendApercu()" style="display:none;">
+  <button
+    id="btnApercu"
+    class="btn-warning"
+    onclick="sendApercu()"
+    style="display:none;"
+  >
     ⚓ Aperçu — Retard de départ
   </button>
 
   <!-- ===================== -->
-  <!-- BOUTON AFFALÉE UNIQUE -->
-  <!-- Libellé changé selon contexte (aperçu ou rappel général) -->
+  <!-- AFFALÉE -->
   <!-- ===================== -->
-  <button id="btnAffalee" class="btn-warning" onclick="affaleeAction()" style="display:none;">
+  <button
+    id="btnAffalee"
+    class="btn-warning"
+    onclick="affaleeAction()"
+    style="display:none;"
+  >
     🔽 Descendre le pavillon
   </button>
 
   <!-- ===================== -->
-  <!-- BOUTONS COURSE        -->
+  <!-- BOUTONS COURSE -->
   <!-- ===================== -->
   <div id="raceBtns" style="display:none;">
 
@@ -82,7 +95,12 @@
       🚩 Rappel individuel
     </button>
 
-    <button id="btnCancelRecallInd" class="btn-success" onclick="cancelRecallIndividual()" style="display:none;">
+    <button
+      id="btnCancelRecallInd"
+      class="btn-success"
+      onclick="cancelRecallIndividual()"
+      style="display:none;"
+    >
       ✅ Retirer rappel individuel
     </button>
 
@@ -90,60 +108,114 @@
       🚨 Rappel général
     </button>
 
-    <!-- Arrivée — visible seulement après fermeture de ligne -->
-    <button id="btnFinish" class="btn-finish" onclick="finishRace()" style="display:none;">
+    <button
+      id="btnFinish"
+      class="btn-finish"
+      onclick="finishRace()"
+      style="display:none;"
+    >
       🏁 Arrivée
     </button>
 
-    <!-- Relancer procédure après annulation -->
-    <button id="btnRestart" class="btn-warning" onclick="restartProcedure()" style="display:none;">
+    <button
+      id="btnRestart"
+      class="btn-warning"
+      onclick="restartProcedure()"
+      style="display:none;"
+    >
       🔄 Relancer une procédure
     </button>
 
   </div>
 
-  <!-- LISTE ARRIVÉES -->
+  <!-- ===================== -->
+  <!-- ARRIVEES -->
+  <!-- ===================== -->
   <div id="finishList"></div>
 
   <!-- ===================== -->
-  <!-- BOUTON OPTIONS        -->
-  <!-- Caché pendant paramétrage -->
+  <!-- MENU OPTIONS -->
   <!-- ===================== -->
-  <button id="btnOptions" class="btn-secondary" onclick="cancelAll()" style="display:none;">
+  <button
+    id="btnOptions"
+    class="btn-secondary"
+    onclick="cancelAll()"
+    style="display:none;"
+  >
     ⚙️ Options / Annuler
   </button>
 
   <!-- ===================== -->
-  <!-- MENU OPTIONS          -->
+  <!-- MENU ANNULATION -->
   <!-- ===================== -->
-  <div id="cancelMenu" class="panel panel-danger" style="display:none;">
+  <div
+    id="cancelMenu"
+    class="panel panel-danger"
+    style="display:none;"
+  >
+
     <h2>⚙️ Options</h2>
 
-    <button class="btn-secondary" onclick="goToSetup()">
+    <!-- Retour paramètres -->
+    <button
+      class="btn-secondary"
+      onclick="goToSetup()"
+    >
       🏠 Retour aux paramètres
     </button>
 
-    <button class="btn-danger" onclick="cancelRace()">
-      🚫 Annuler la course en cours
+    <!-- N seul -->
+    <button
+      class="btn-danger"
+      onclick="cancelRaceN()"
+    >
+      🚫 Annuler la course (N)
     </button>
 
-    <button class="btn-danger" onclick="endRegatta()">
-      🏴 Terminer la régate
+    <!-- N sur H -->
+    <button
+      class="btn-danger"
+      onclick="cancelRaceNH()"
+    >
+      🏠 Annuler et retour à terre (N/H)
     </button>
 
-    <!-- Visible seulement après fin/annulation -->
-    <button id="menuRelancerCourse" class="btn-warning" onclick="relancerCourse()" style="display:none;">
+    <!-- N sur A -->
+    <button
+      class="btn-danger"
+      onclick="endRegattaNA()"
+    >
+      🏴 Terminer la régate (N/A)
+    </button>
+
+    <!-- Relancer -->
+    <button
+      id="menuRelancerCourse"
+      class="btn-warning"
+      onclick="relancerCourse()"
+      style="display:none;"
+    >
       🔄 Relancer une course (repart de zéro)
     </button>
 
-    <button class="btn-secondary" onclick="hideCancelMenu()">
+    <!-- Fermer -->
+    <button
+      class="btn-secondary"
+      onclick="hideCancelMenu()"
+    >
       ↩️ Fermer ce menu
     </button>
+
   </div>
+
+  <!-- FOOTER -->
   <div id="footer">
-  Développé par <strong>Sébastien RABAUD</strong> — CVBS © 2026
-    </div>
+    Développé par <strong>Sébastien RABAUD</strong> — CVBS © 2026
+  </div>
+
 </div>
+
 <script src="script.js"></script>
+
 </body>
 </html>
