@@ -123,9 +123,10 @@ function broadcastState() {
  * a         : Pavillon A (plus de courses aujourd'hui)
  * h         : Pavillon H (signaux à terre)
  * apert     : Aperçu (retard)
+ * s         : Pavillon S ()Réduction de parcours)
  */
-function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, h, apert } = {}) {
-  currentState.flags = { orange, classFlag, prep, x, ap, bleu, n, a, h, apert };
+function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, h, apert, s } = {}) {
+  currentState.flags = { orange, classFlag, prep, x, ap, bleu, n, a, h, apert,s };
   let html = "";
   if (orange)    html += '<img src="images/Pav_orange.svg"  alt="Orange">';
   if (classFlag) html += '<img src="images/Pav_VNO.svg"     alt="Classe">';
@@ -140,6 +141,7 @@ function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, h, apert } = 
   if (a)     html += '<img src="images/Pav_A.svg"          alt="Pavillon A">';
   if (h)     html += '<img src="images/Pav_H.svg"          alt="Pavillon H">';
   if (apert) html += '<img src="images/Pav_apercu.svg"     alt="Aperçu">';
+  if (s) html += '<img src="images/Pav_S.svg"     alt="Pavillon S">';
   document.getElementById("flags").innerHTML = html;
   broadcastState();
 }
@@ -147,6 +149,7 @@ function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, h, apert } = 
 // ===================== OUVERTURE LIGNE =====================
 function openLine() {
   send({ type:"OPEN_LINE" });
+     playSound("SON_COURT");
   openLineUI();
 }
 
@@ -161,6 +164,25 @@ function openLineUI() {
   send({ type:"BEEP_COURT" }); playSound("SON_COURT");
   startProcedure(delay);
 }
+// ===================== APERÇU (RETARD) AVANT OUVERTURE LIGNE=====================
+/**
+ * RCV 27.3 — Aperçu = retard
+ * 2 sons au hissage, 1 son à l'affalée
+ * Relance signal avertissement 1 min après affalée
+ */
+function sendApercuAvt() {
+  
+  affaleeContext = "apercuAvt";
+  setHeader("⚓ Aperçu — Retard ouverture ligne");
+  updateFlags({apert:true });
+  send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
+  document.getElementById("countdown").innerText = "";
+  currentState.countdown = "";
+  hideSetup();
+  document.getElementById("btnAffalee").innerText = "🔽 Descendre l'aperçu (1 son)";
+  showBtn("btnAffalee");
+}
+
 
 // ===================== APERÇU (RETARD) =====================
 /**
@@ -186,6 +208,7 @@ function sendApercu() {
 /**
  * Comportement selon affaleeContext :
  * "apercu"  → relance T-5 dans 1 min
+ * "apercu"  → relance T-5 dans 1 min et orange envoyé
  * "general" → relance T-5 dans 1 min (orange reste envoyé)
  * "n"       → relance T-5 dans 1 min (orange reste envoyé)
  */
@@ -196,6 +219,8 @@ function affaleeAction() {
   if (affaleeContext === "apercu") {
     updateFlags({ orange:true });
     setHeader("⏳ Signal avertissement dans 1 min");
+  } else if (affaleeContext === "apercuAvt") {
+    openLineUI();
   } else if (affaleeContext === "general") {
     updateFlags({ orange:true });
     setHeader("⏳ Relance procédure dans 1 min");
@@ -389,7 +414,8 @@ function startRecallTimer(sec) {
       document.getElementById("countdown").innerText = "";
       currentState.countdown = "";
 
-      // Bouton arrivée visible maintenant
+      // Bouton arrivée et reduction parcours visibles maintenant
+      showBtn("btnReduc");
       showBtn("btnFinish");
       return;
     }
@@ -485,10 +511,18 @@ function handleRecallGeneral() {
   showBtn("btnAffalee");
 }
 
+// ===================== REDUCTION PARCOURS =====================
+function reducRace() {
+ setHeader("⚠️ Parcours réduit 🏁");
+   updateFlags({ s:true });
+ send({ type:"BEEP_DOUBLE" }); playSequence("SON_COURT", 2);
+    hideBtn("btnReduc")
+}
 // ===================== ARRIVÉES =====================
 function finishRace() {
   send({ type:"FINISH" });
   handleFinish();
+  hideBtn("btnReduc");//Ne peut plus réduire le parcours
 }
 
 function handleFinish() {
@@ -643,7 +677,7 @@ function endRegattaNA() {
 function relancerCourse() {
   hideCancelMenu();
   _resetRaceData();
-  hideBtn("btnRestart"); hideBtn("btnFinish");
+  hideBtn("btnRestart"); hideBtn("btnFinish");hideBtn("btnReduc");
   hideBtn("btnApercu");  hideBtn("btnAffalee"); hideBtn("btnCancelRecallInd");
   document.getElementById("raceBtns").style.display = "block";
   showBtn("btnRecallInd"); showBtn("btnRecallGen");
@@ -651,7 +685,7 @@ function relancerCourse() {
 }
 
 function restartProcedure() {
-  hideBtn("btnRestart");
+  hideBtn("btnRestart");hideBtn("btnReduc");
   _resetRaceData();
   updateFlags({ orange:true });
   setHeader("🚩 Relance — Ligne ouverte");
@@ -710,8 +744,9 @@ function resetAll() {
   document.getElementById("cancelMenu").style.display   = "none";
 
   hideBtn("btnOptions");
-  hideBtn("btnApercu"); hideBtn("btnAffalee");
-  hideBtn("btnCancelRecallInd"); hideBtn("btnFinish"); hideBtn("btnRestart");
+//hideBtn("btnApercu"); 
+  hideBtn("btnAffalee");
+  hideBtn("btnCancelRecallInd"); hideBtn("btnFinish"); hideBtn("btnRestart");hideBtn("btnReduc");
   showBtn("btnRecallInd"); showBtn("btnRecallGen");
 
   broadcastState();
@@ -721,10 +756,13 @@ function resetAll() {
 function hideSetup() {
   document.getElementById("setup").style.display   = "none";
   document.getElementById("openBtn").style.display = "none";
+  document.getElementById("btnApercuAvt").style.display = "none";
+
 }
 function showSetup() {
   document.getElementById("setup").style.display   = "block";
   document.getElementById("openBtn").style.display = "block";
+ document.getElementById("btnApercuAvt").style.display = "block";
 }
 
 function cancelAll() { showCancelMenu(); }

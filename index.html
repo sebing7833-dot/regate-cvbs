@@ -61,8 +61,18 @@
   <button id="openBtn" onclick="openLine()">
     🚩 Ouvrir la ligne
   </button>
-
+ <!-- ===================== -->
+  <!-- APERÇU avant ouverture de ligne-->
   <!-- ===================== -->
+  <button
+    id="btnApercuAvt"
+    class="btn-warning"
+    onclick="sendApercuAvt()"
+   
+  >
+    ⚓ Aperçu — Retard ouverture de ligne
+  </button>
+
   <!-- APERÇU -->
   <!-- ===================== -->
   <button
@@ -106,6 +116,14 @@
 
     <button id="btnRecallGen" onclick="recallGeneral()">
       🚨 Rappel général
+    </button>
+     <button
+      id="btnReduc"
+      class="btn-reduc"
+      onclick="reducRace()"
+      style="display:none;"
+    >
+      🔽 Réduction parcours 🏁
     </button>
 
     <button
