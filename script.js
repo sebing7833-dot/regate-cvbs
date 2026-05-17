@@ -1,13 +1,9 @@
 /**
  * SCRIPT DE GESTION DE RÉGATE - CVBS
- * Version 6.0 — Conforme aux procédures FFVoile officielles
+ * Version 7.0 — Conforme aux procédures FFVoile officielles
  *
- * Corrections v6 :
- * - Drapeau bleu déplacé à la fermeture de ligne (pas au 1er arrivant)
- * - Retrait automatique rappel individuel à 4 min (RCV 29.1)
- * - Menu Options : 3 cas distincts N / N sur H / N sur A
- * - N seul : orange reste envoyé + relance procédure dans 1 min
- * - Pavillon H ajouté dans updateFlags()
+ * Corrections v7 :
+ * - ajout des voix
  */
 
 let ws, connected = false, mockMode = false;
@@ -38,8 +34,6 @@ function playVoice(fichier) {
 
   currentVoice.play().catch(e => console.log("Audio:", e));
 }
-
-
 // ===================== AUDIO =====================
 let audioCtx;
 document.addEventListener("click", () => {
@@ -62,8 +56,6 @@ function playSound(event) {
 function playSequence(event, count, gap = 400) {
   for (let i = 0; i < count; i++) setTimeout(() => playSound(event), i * gap);
 }
-
-
 
 // ===================== WEBSOCKET =====================
 let timeout = setTimeout(() => { if (!connected) enableMock(); }, 1500);
@@ -149,7 +141,6 @@ function updateFlags({ orange, classFlag, prep, x, ap, bleu, n, a, h, apert, s }
 // ===================== OUVERTURE LIGNE =====================
 function openLine() {
   send({ type:"OPEN_LINE" });
-     playSound("SON_COURT");
   openLineUI();
 }
 
@@ -250,7 +241,8 @@ function startProcedure(sec) {
   clearInterval(tProcedure);
   tProcedure = setInterval(() => {
     updateCountdown(sec, "Procédure de départ dans");
-    if (sec === 30) playVoice("signal_preparatoire_30s.ogg"); 
+//ajout du décompte
+  if (sec === 33) playVoice("signal_preparatoire_30s.ogg"); //commence 3 secondes avant afin de terminer quand il reste 30s
     if (sec === 10) playVoice("dix.ogg");
     if (sec === 9) playVoice("neuf.ogg");
     if (sec === 8) playVoice("huit.ogg");
@@ -264,7 +256,7 @@ function startProcedure(sec) {
     if (sec <= 0) { clearInterval(tProcedure); startProcedureUI(); }
     sec--;
   }, 1000);
-}   
+}
 
 // ===================== T-5 SIGNAL AVERTISSEMENT =====================
 /**
@@ -289,9 +281,9 @@ function startStart(sec) {
   clearInterval(tStart);
   tStart = setInterval(() => {
     updateCountdown(sec, "DÉPART DANS");
-
+    // ajout des voix
     // 1. Alerte 30s avant le préparatoire (T-4:30) puis décompte les 10 dernières secondes
-    if (sec === 272) playVoice("signal_avertissement_30s.ogg");
+    if (sec === 272) playVoice("signal_avertissement_30s.ogg"); //commence 2 secondes avant pour terminer à 30s
     if (sec === 250) playVoice("dix.ogg");
     if (sec === 249) playVoice("neuf.ogg");
     if (sec === 248) playVoice("huit.ogg");
@@ -302,15 +294,13 @@ function startStart(sec) {
     if (sec === 243) playVoice("trois.ogg");
     if (sec === 242) playVoice("deux.ogg");
     if (sec === 241) playVoice("un.ogg");
-    // 2. Signal préparatoire (T-4)
+    //2. T-4 : Signal préparatoire
     if (sec === 240) {
       updateFlags({ orange:true, classFlag:true, prep:document.getElementById("prepFlag").value });
       send({ type:"BEEP_COURT" }); playSound("SON_COURT");
-      
     }
-
     // 3. Alerte 30s avant affalée préparatoire (T-1:30)  puis décompte les 10 dernières secondes
-    if (sec === 93) playVoice("affalee_avertissement_30s.ogg");
+    if (sec === 93) playVoice("affalee_avertissement_30s.ogg");//commence 3 secondes avant pour terminer à 30s
     if (sec === 70) playVoice("dix.ogg");
     if (sec === 69) playVoice("neuf.ogg");
     if (sec === 68) playVoice("huit.ogg");
@@ -321,13 +311,11 @@ function startStart(sec) {
     if (sec === 63) playVoice("trois.ogg");
     if (sec === 62) playVoice("deux.ogg");
     if (sec === 61) playVoice("un.ogg");
-    // 4. Une minute (T-1)
+    //4. T-1 : Affalée préparatoire
     if (sec === 60) {
       updateFlags({ orange:true, classFlag:true, prep:null });
       send({ type:"BEEP_LONG" }); playSound("SON_LONG");
-     // announce("Attention... une minute avant le départ");
     }
-
     // 5. Décompte final 10 à 1 (Très réactif)
     if (sec === 32) playVoice("depart_30s.ogg");
     if (sec === 10) playVoice("dix.ogg");
@@ -340,18 +328,17 @@ function startStart(sec) {
     if (sec === 3) playVoice("trois.ogg");
     if (sec === 2) playVoice("deux.ogg");
     if (sec === 1) playVoice("un.ogg");
-
-    // 6. TOP DÉPART (T0)
+    // 6. T0 : DÉPART
     if (sec === 0) {
       clearInterval(tStart);
       hideBtn("btnApercu");
       startRaceUI();
-    //  announce("Top ! Départ !");
       return;
     }
     sec--;
   }, 1000);
 }
+
 // ===================== COURSE EN COURS =====================
 function startRaceUI() {
   setHeader("🏁 Course en cours");
@@ -375,10 +362,9 @@ function startRaceUI() {
  */
 function startRecallTimer(sec) {
   clearInterval(tRecall);
- 
-
   tRecall = setInterval(() => {
-// 5. Décompte final 10 à 1 (Très réactif)
+//ajout voix
+//  Décompte final 10 à 1 (Très réactif)
     if (sec === 30) playVoice("affalee_orange_30s.ogg");
     if (sec === 10) playVoice("dix.ogg");
     if (sec === 9) playVoice("neuf.ogg");
@@ -414,7 +400,7 @@ function startRecallTimer(sec) {
       document.getElementById("countdown").innerText = "";
       currentState.countdown = "";
 
-      // Bouton arrivée et reduction parcours visibles maintenant
+         // Bouton arrivée et reduction parcours visibles maintenant
       showBtn("btnReduc");
       showBtn("btnFinish");
       return;
@@ -510,7 +496,6 @@ function handleRecallGeneral() {
   document.getElementById("btnAffalee").innerText = "🔽 Descendre le 1er substitut (1 son)";
   showBtn("btnAffalee");
 }
-
 // ===================== REDUCTION PARCOURS =====================
 function reducRace() {
  setHeader("⚠️ Parcours réduit 🏁");
@@ -522,7 +507,7 @@ function reducRace() {
 function finishRace() {
   send({ type:"FINISH" });
   handleFinish();
-  hideBtn("btnReduc");//Ne peut plus réduire le parcours
+ hideBtn("btnReduc");//Ne peut plus réduire le parcours
 }
 
 function handleFinish() {
@@ -748,7 +733,6 @@ function resetAll() {
   hideBtn("btnAffalee");
   hideBtn("btnCancelRecallInd"); hideBtn("btnFinish"); hideBtn("btnRestart");hideBtn("btnReduc");
   showBtn("btnRecallInd"); showBtn("btnRecallGen");
-
   broadcastState();
   showSetup();
 }
@@ -756,8 +740,7 @@ function resetAll() {
 function hideSetup() {
   document.getElementById("setup").style.display   = "none";
   document.getElementById("openBtn").style.display = "none";
-  document.getElementById("btnApercuAvt").style.display = "none";
-
+ document.getElementById("btnApercuAvt").style.display = "none";
 }
 function showSetup() {
   document.getElementById("setup").style.display   = "block";

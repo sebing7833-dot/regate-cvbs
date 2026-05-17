@@ -3,24 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Régate CVBS</title>
+  <title>Régate CBVS</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
 <div class="app">
 
-  <!-- LOGO CLUB -->
-  <div id="logoBar">
-    <img src="images/logo.jpg" alt="Logo CVBS">
-    <span>Régate CVBS</span>
-    <img src="images/logo.jpg" alt="Logo CVBS">
-  </div>
+<!-- LOGO CLUB — fixe en haut -->
+<div id="logoBar">
+  <img src="images/logo.jpg" alt="Logo CBVS">
+  <span>Régate CVBS</span>
+ <img src="images/logo.jpg" alt="Logo CBVS">
+</div>
+
 
   <!-- HEADER -->
   <div id="header">⛵ Paramétrage Régate ⛵</div>
-
-  <!-- STATUS -->
+    <!-- FOOTER -->
+  
+  <!-- STATUS CONNEXION -->
   <div id="status">...</div>
 
   <!-- FANIONS -->
@@ -29,14 +30,13 @@
   <!-- COUNTDOWN -->
   <div id="countdown"></div>
 
-  <!-- HEURE DEPART -->
+  <!-- HEURE DÉPART OFFICIEL -->
   <div id="startTimeDisplay"></div>
 
   <!-- ===================== -->
-  <!-- PARAMETRES -->
+  <!-- SETUP : Paramètres    -->
   <!-- ===================== -->
   <div id="setup" class="panel">
-
     <h2>⚙️ Paramètres</h2>
 
     <label>Fanion préparatoire</label>
@@ -52,15 +52,11 @@
 
     <label>Temps limite arrivée (min)</label>
     <input type="number" id="finishLimit" value="20" min="1" max="120">
-
   </div>
-
+<!-- ===================== -->
+  <!-- OUVERTURE OUVERTURE LIGNE-->
   <!-- ===================== -->
-  <!-- OUVERTURE -->
-  <!-- ===================== -->
-  <button id="openBtn" onclick="openLine()">
-    🚩 Ouvrir la ligne
-  </button>
+  <button id="openBtn" onclick="openLine()">🚩 Ouvrir la ligne</button>
  <!-- ===================== -->
   <!-- APERÇU avant ouverture de ligne-->
   <!-- ===================== -->
@@ -72,32 +68,24 @@
   >
     ⚓ Aperçu — Retard ouverture de ligne
   </button>
-
-  <!-- APERÇU -->
   <!-- ===================== -->
-  <button
-    id="btnApercu"
-    class="btn-warning"
-    onclick="sendApercu()"
-    style="display:none;"
-  >
+  <!-- APERÇU (retard)       -->
+  <!-- Visible dès ouverture jusqu'à T0 -->
+  <!-- ===================== -->
+  <button id="btnApercu" class="btn-warning" onclick="sendApercu()" style="display:none;">
     ⚓ Aperçu — Retard de départ
   </button>
 
   <!-- ===================== -->
-  <!-- AFFALÉE -->
+  <!-- BOUTON AFFALÉE UNIQUE -->
+  <!-- Libellé changé selon contexte (aperçu ou rappel général) -->
   <!-- ===================== -->
-  <button
-    id="btnAffalee"
-    class="btn-warning"
-    onclick="affaleeAction()"
-    style="display:none;"
-  >
+  <button id="btnAffalee" class="btn-warning" onclick="affaleeAction()" style="display:none;">
     🔽 Descendre le pavillon
   </button>
 
   <!-- ===================== -->
-  <!-- BOUTONS COURSE -->
+  <!-- BOUTONS COURSE        -->
   <!-- ===================== -->
   <div id="raceBtns" style="display:none;">
 
@@ -105,53 +93,38 @@
       🚩 Rappel individuel
     </button>
 
-    <button
-      id="btnCancelRecallInd"
-      class="btn-success"
-      onclick="cancelRecallIndividual()"
-      style="display:none;"
-    >
+    <button id="btnCancelRecallInd" class="btn-success" onclick="cancelRecallIndividual()" style="display:none;">
       ✅ Retirer rappel individuel
     </button>
 
     <button id="btnRecallGen" onclick="recallGeneral()">
       🚨 Rappel général
     </button>
-     <button
-      id="btnReduc"
-      class="btn-reduc"
-      onclick="reducRace()"
-      style="display:none;"
-    >
-      🔽 Réduction parcours 🏁
-    </button>
 
-    <button
-      id="btnFinish"
-      class="btn-finish"
-      onclick="finishRace()"
-      style="display:none;"
-    >
+    <!-- Arrivée — visible seulement après fermeture de ligne -->
+    <button id="btnFinish" class="btn-finish" onclick="finishRace()" style="display:none;">
       🏁 Arrivée
     </button>
 
-    <button
-      id="btnRestart"
-      class="btn-warning"
-      onclick="restartProcedure()"
-      style="display:none;"
-    >
+    <!-- Relancer procédure après annulation -->
+    <button id="btnRestart" class="btn-warning" onclick="restartProcedure()" style="display:none;">
       🔄 Relancer une procédure
     </button>
 
   </div>
 
-  <!-- ===================== -->
-  <!-- ARRIVEES -->
-  <!-- ===================== -->
+  <!-- LISTE ARRIVÉES -->
   <div id="finishList"></div>
 
   <!-- ===================== -->
+  <!-- BOUTON OPTIONS        -->
+  <!-- Caché pendant paramétrage -->
+  <!-- ===================== -->
+  <button id="btnOptions" class="btn-secondary" onclick="cancelAll()" style="display:none;">
+    ⚙️ Options / Annuler
+  </button>
+
+   <!-- ===================== -->
   <!-- MENU OPTIONS -->
   <!-- ===================== -->
   <button
@@ -206,34 +179,19 @@
       🏴 Terminer la régate (N/A)
     </button>
 
-    <!-- Relancer -->
-    <button
-      id="menuRelancerCourse"
-      class="btn-warning"
-      onclick="relancerCourse()"
-      style="display:none;"
-    >
+    <!-- Visible seulement après fin/annulation -->
+    <button id="menuRelancerCourse" class="btn-warning" onclick="relancerCourse()" style="display:none;">
       🔄 Relancer une course (repart de zéro)
     </button>
 
-    <!-- Fermer -->
-    <button
-      class="btn-secondary"
-      onclick="hideCancelMenu()"
-    >
+    <button class="btn-secondary" onclick="hideCancelMenu()">
       ↩️ Fermer ce menu
     </button>
-
   </div>
-
-  <!-- FOOTER -->
   <div id="footer">
-    Développé par <strong>Sébastien RABAUD</strong> — CVBS © 2026
-  </div>
-
+  Développé par <strong>Sébastien RABAUD</strong> — CVBS © 2026
+    </div>
 </div>
-
 <script src="script.js"></script>
-
 </body>
 </html>
